@@ -1,0 +1,26 @@
+{"timestamp":"2025-10-28T02:10:18.657582","level":"info","event":"DAG bundles loaded: dags-folder, example_dags","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager"}
+{"timestamp":"2025-10-28T02:10:18.658644","level":"info","event":"Filling up the DagBag from /home/airflow/.local/lib/python3.12/site-packages/airflow/example_dags/tutorial_taskflow_api_virtualenv.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-10-28T02:10:18.730948Z","level":"info","event":"Task instance is in running state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:18.731393Z","level":"info","event":" Previous state of the Task instance: queued","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:18.731774Z","level":"info","event":"Current task name:extract","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:18.732015Z","level":"info","event":"Dag name:tutorial_taskflow_api_virtualenv","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:18.703230","level":"info","event":"Executing cmd: uv venv --allow-existing --seed --python python /tmp/venvpctz9j4f","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:18.705179","level":"info","event":"Output:","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:19.074212","level":"info","event":"Using CPython 3.12.10 interpreter at: /usr/local/bin/python","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:19.075442","level":"info","event":"Creating virtual environment with seed packages at: /tmp/venvpctz9j4f","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:20.623187","level":"info","event":" + pip==25.3","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:20.628726","level":"info","event":"Executing cmd: uv pip install --python /tmp/venvpctz9j4f/bin/python -r /tmp/venvpctz9j4f/requirements.txt","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:20.629350","level":"info","event":"Output:","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:20.797180","level":"info","event":"Using Python 3.12.10 environment at: /tmp/venvpctz9j4f","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.446831","level":"info","event":"Resolved 2 packages in 645ms","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.637604","level":"info","event":"Prepared 2 packages in 190ms","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.648450","level":"info","event":"Installed 2 packages in 10ms","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.649425","level":"info","event":" + dill==0.4.0","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.649582","level":"info","event":" + funcsigs==1.0.2","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.704894","level":"info","event":"Executing cmd: /tmp/venvpctz9j4f/bin/python /tmp/venv-callkgct1bin/script.py /tmp/venv-callkgct1bin/script.in /tmp/venv-callkgct1bin/script.out /tmp/venv-callkgct1bin/string_args.txt /tmp/venv-callkgct1bin/termination.log /tmp/venv-callkgct1bin/airflow_context.json","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:21.705686","level":"info","event":"Output:","logger":"airflow.utils.process_utils"}
+{"timestamp":"2025-10-28T02:10:22.134798","level":"info","event":"Done. Returned value was: {'1001': 301.27, '1002': 433.21, '1003': 502.22}","logger":"airflow.task.operators.airflow.providers.standard.decorators.python_virtualenv._PythonVirtualenvDecoratedOperator"}
+{"timestamp":"2025-10-28T02:10:22.135619","level":"info","event":"Pushing xcom","ti":"RuntimeTaskInstance(id=UUID('019a2894-8e3b-78d6-bde9-b0ddf0d56b3a'), task_id='extract', dag_id='tutorial_taskflow_api_virtualenv', run_id='manual__2025-10-28T02:10:15.688102+00:00', try_number=1, map_index=-1, hostname='7e74f8a207ee', context_carrier={}, task=<Task(_PythonVirtualenvDecoratedOperator): extract>, bundle_instance=LocalDagBundle(name=example_dags), max_tries=0, start_date=datetime.datetime(2025, 10, 28, 2, 10, 16, 971630, tzinfo=TzInfo(UTC)), end_date=None, is_mapped=False)","logger":"task"}
+{"timestamp":"2025-10-28T02:10:22.192636Z","level":"info","event":"Task instance in success state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:22.193119Z","level":"info","event":" Previous state of the Task instance: running","chan":"stdout","logger":"task"}
+{"timestamp":"2025-10-28T02:10:22.193417Z","level":"info","event":"Task operator:<Task(_PythonVirtualenvDecoratedOperator): extract>","chan":"stdout","logger":"task"}
