@@ -6,7 +6,7 @@ metadata:
   namespace: bigdata
 spec:
   schedule: "*/5 * * * *"
-  concurrencyPolicy: Forbid   # ← NGĂN CHẠY MỚI NẾU CŨ CHƯA XONG
+  concurrencyPolicy: Forbid   # NGĂN CHẠY MỚI NẾU CŨ CHƯA XONG
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
   jobTemplate:
@@ -25,4 +25,4 @@ spec:
               value: "kafka:9092"
             - name: KAFKA_TOPIC
               value: "spotify_tracks"
-          restartPolicy: Never   # ← CHẠY XONG LÀ CHẾT
+          restartPolicy: Never   # CHẠY XONG LÀ CHẾT

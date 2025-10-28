@@ -12,13 +12,13 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "spotify_tracks")
-PLAYLIST_ID = "5Ip7qLwuvGAluWE2PBrBNl"          # Today's Top Hits
-MAX_TRACKS = 50                                 # <-- Chỉ lấy 50 bài
+PLAYLIST_ID = "5Ip7qLwuvGAluWE2PBrBNl"
+MAX_TRACKS = 50                                 # Chỉ lấy 50 bài
 
 if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
     raise EnvironmentError("SPOTIFY_CLIENT_ID và SPOTIFY_CLIENT_SECRET phải được thiết lập!")
 
-# === KHỞI TẠO SPOTIFY (cách mới) ===
+# === KHỞI TẠO SPOTIFY ===
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=SPOTIFY_CLIENT_ID,
     client_secret=SPOTIFY_CLIENT_SECRET
@@ -31,7 +31,7 @@ producer = KafkaProducer(
     retries=3,
     acks='all'
 )
-print(f"✅ Connected to Kafka.")
+print(f"Connected to Kafka.")
 
 def get_first_n_tracks():
     """
