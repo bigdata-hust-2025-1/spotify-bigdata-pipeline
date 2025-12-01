@@ -1,0 +1,57 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: bronze-to-silver-artists-job
+  namespace: bigdata
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "k67ithust/spotify-spark-jobs:v1"
+  imagePullPolicy: Always
+  
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_jobs/batch/bronze_to_silver_artists.py"
+  
+  sparkVersion: "3.5.3"
+  restartPolicy:
+    type: Never
+
+  # --- THÊM ĐOẠN NÀY ---
+  # Cấu hình cho Spark tải thư viện vào thư mục /tmp (nơi ai cũng có quyền ghi)
+  sparkConf:
+    "spark.jars.ivy": "/tmp/.ivy2"
+  # ---------------------
+
+  deps:
+    packages:
+      - org.apache.hadoop:hadoop-aws:3.3.4
+      - com.amazonaws:aws-java-sdk-bundle:1.12.262
+
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1024m"
+    labels:
+      version: 3.5.3
+    serviceAccount: spark-operator-spark
+    env:
+      - name: MINIO_ENDPOINT
+        value: "http://minio.bigdata:9000"
+      - name: MINIO_ACCESS_KEY
+        value: "minioadmin"
+      - name: MINIO_SECRET_KEY
+        value: "miniopass123"
+
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1024m"
+    labels:
+      version: 3.5.3
+    env:
+      - name: MINIO_ENDPOINT
+        value: "http://minio.bigdata:9000"
+      - name: MINIO_ACCESS_KEY
+        value: "minioadmin"
+      - name: MINIO_SECRET_KEY
+        value: "miniopass123"
