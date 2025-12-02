@@ -1,0 +1,28 @@
+# ingestion/producer_cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: spotify-producer
+  namespace: bigdata
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid   # NGĂN CHẠY MỚI NẾU CŨ CHƯA XONG
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: producer
+            image: duongnguyen2204/spotify-producer:latest
+            env:
+            - name: SPOTIFY_CLIENT_ID
+              value: "f0c85d4810b2436a9a1845b6d8ce0054"
+            - name: SPOTIFY_CLIENT_SECRET
+              value: "5b079f45e7fe4c1997f443734212f2bf"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+            - name: KAFKA_TOPIC
+              value: "spotify_tracks"
+          restartPolicy: Never   # CHẠY XONG LÀ CHẾT
