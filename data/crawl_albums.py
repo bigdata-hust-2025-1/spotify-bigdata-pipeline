@@ -5,7 +5,9 @@ import time
 import os
 import random
 
-
+if os.path.exists(".cache"):
+    os.remove(".cache")
+    print("Đã xóa file .cache cũ")
 
 
 # === Thiết lập client ===
@@ -13,14 +15,10 @@ import random
 client_id = "feafd61861a3429bb2ab1654006da13b"
 client_secret = "a35230765c0b46abb5c10c0fe99e64c4"
 
-
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=client_id,
     client_secret=client_secret
 ))
-
-
-
 
 # === Đọc file flattened artists ===
 input_file = "artists.json"
@@ -40,7 +38,7 @@ print(f"Đã tải {len(all_artists)} artist từ file")
 
 # Lấy 5000 artist ngẫu nhiên
 random.seed(42)  # Để kết quả reproducible
-artists_to_process = random.sample(all_artists, min(5000, len(all_artists)))
+artists_to_process = random.sample(all_artists, min(10000, len(all_artists)))
 print(f"Đã chọn ngẫu nhiên {len(artists_to_process)} artist để xử lý")
 
 

@@ -5,6 +5,9 @@ import time
 import os
 
 
+if os.path.exists(".cache"):
+    os.remove(".cache")
+    print("Đã xóa file .cache cũ")
 
 
 # === Thiết lập client ===
