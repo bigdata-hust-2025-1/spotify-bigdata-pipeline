@@ -1,0 +1,63 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: spotify-streaming-job
+  namespace: bigdata
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "k67ithust/spotify-spark-jobs:v1"
+  imagePullPolicy: Always
+  
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_jobs/stream/stream_processing.py"
+  
+  sparkVersion: "3.5.3"
+  
+  # --- [FIX 1] Cấu hình Restart đầy đủ ---
+  restartPolicy:
+    type: Always
+    onFailureRetries: 3
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 10  # <--- THÊM DÒNG NÀY để Operator không bị lỗi nil
+  
+  # --- [FIX 2] Chuyển cache vào /tmp để tránh lỗi Permission ---
+  sparkConf:
+    "spark.jars.ivy": "/tmp/.ivy2"
+  
+  # Thư viện Kafka và Mongo
+  deps:
+    packages:
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3
+      - org.mongodb.spark:mongo-spark-connector_2.12:10.3.0
+
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1024m"
+    labels:
+      version: 3.5.3
+    serviceAccount: spark-operator-spark
+    # Thêm biến môi trường cho driver nếu cần (ví dụ kết nối MinIO checkpoint)
+    env:
+      - name: MINIO_ENDPOINT
+        value: "http://minio.bigdata:9000"
+      - name: MINIO_ACCESS_KEY
+        value: "minioadmin"
+      - name: MINIO_SECRET_KEY
+        value: "miniopass123"
+
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1024m"
+    labels:
+      version: 3.5.3
+    env:
+      - name: MINIO_ENDPOINT
+        value: "http://minio.bigdata:9000"
+      - name: MINIO_ACCESS_KEY
+        value: "minioadmin"
+      - name: MINIO_SECRET_KEY
+        value: "miniopass123"

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: bigdata
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:5.0
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+      volumes:
+      - name: mongo-data
+        emptyDir: {} # Dùng tạm bộ nhớ, nếu muốn bền vững thì dùng PVC như MinIO
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: bigdata
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  selector:
+    app: mongodb
+  type: ClusterIP
