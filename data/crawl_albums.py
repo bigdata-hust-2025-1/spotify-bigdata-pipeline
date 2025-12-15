@@ -11,9 +11,8 @@ if os.path.exists(".cache"):
 
 
 # === Thiết lập client ===
-# Key 6:
-client_id = "feafd61861a3429bb2ab1654006da13b"
-client_secret = "a35230765c0b46abb5c10c0fe99e64c4"
+client_id = os.getenv("SPOTIFY_CLIENT_ID")
+client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=client_id,

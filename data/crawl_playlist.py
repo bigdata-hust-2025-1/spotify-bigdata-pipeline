@@ -11,9 +11,8 @@ if os.path.exists(".cache"):
 
 
 # === Thiết lập client ===
-# Key 9:
-client_id = "f4e5bb1fd89341eba26444711f54f72b"
-client_secret = "39ce6bad834d4c09a931bb8ceb5caac6"
+client_id = os.getenv("SPOTIFY_CLIENT_ID")
+client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 
 
