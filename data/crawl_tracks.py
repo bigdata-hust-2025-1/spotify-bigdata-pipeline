@@ -5,20 +5,21 @@ import time
 import os
 
 
+if os.path.exists(".cache"):
+    os.remove(".cache")
+    print("Đã xóa file .cache cũ")
 
 
 # === Thiết lập client ===
-# Key 7:
-client_id = "53a5f26bd0324d6788801a964c08d1c1"
-client_secret = "ee73313a8f3f406fb39bc8712fa569be"
+# Key 5:
+client_id = "a5ebff761f4a4e19a4650ed2b168e09b"
+client_secret = "1a1900c17dab444daf54af3c08a9fe43"
 
 
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=client_id,
     client_secret=client_secret
 ))
-
-
 
 
 # === Đọc file flattened albums ===

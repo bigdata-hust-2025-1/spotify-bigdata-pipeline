@@ -38,7 +38,7 @@ print(f"Tổng số category: {len(all_categories)}")
 global_seen_artist_ids = set()
 
 # === File JSON để ghi dần ===
-output_file = "all_artists_by_category_unique.json"
+output_file = "artists.json"
 
 # Khởi tạo file JSON rỗng hoặc đọc dữ liệu cũ (nếu có)
 if os.path.exists(output_file):
