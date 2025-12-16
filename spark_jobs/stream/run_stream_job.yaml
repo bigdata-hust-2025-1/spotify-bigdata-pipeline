@@ -30,7 +30,7 @@ spec:
   deps:
     packages:
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3
-      - org.mongodb.spark:mongo-spark-connector_2.12:10.3.0
+      - org.elasticsearch:elasticsearch-spark-30_2.12:7.17.9
 
   driver:
     cores: 1

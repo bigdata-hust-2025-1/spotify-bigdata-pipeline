@@ -6,6 +6,8 @@ minikube kubectl -- port-forward svc/minio -n bigdata 9000:9000
 [http://localhost:9001/](http://localhost:9001/)
 minikube kubectl -- port-forward svc/kafka-ui -n bigdata 8080:8080 #kafka
 [http://localhost:8080/](http://localhost:8080/)
+minikube kubectl -- port-forward svc/kafka -n bigdata 9092:9092 #kafka
+
 docker run -it --rm `
     -v "${PWD}/data:/data" `
     -v "${PWD}/spark_jobs:/opt/spark/work-dir/spark_jobs" `

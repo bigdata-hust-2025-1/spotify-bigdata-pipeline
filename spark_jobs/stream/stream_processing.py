@@ -3,21 +3,19 @@ from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.types import *
 
-# --- CẤU HÌNH ---
+# Cấu hình Kafka & Elasticsearch
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
-# Lưu ý: Topic này phải khớp với bên Producer
 TOPIC = "spotify_playback_events"
-MONGO_URI = "mongodb://mongodb.bigdata:27017/spotify_db.playback_events"
+# Cấu hình ES
+ES_NODES = "elasticsearch.bigdata"
+ES_PORT = "9200"
+ES_RESOURCE = "realtime_events/doc" # Index/Type
 
 def main():
-    spark = SparkSession.builder \
-        .appName("Spotify_Event_Stream_Processor") \
-        .getOrCreate()
-
+    spark = SparkSession.builder.appName("Spotify_ELK_Stream").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    # 1. Định nghĩa Schema cho Sự Kiện Nghe Nhạc (User Playback Event)
-    # Phải khớp 100% với JSON mà produce_to_kafka.py gửi lên
+    # 1. Schema (Giữ nguyên)
     event_schema = StructType([
         StructField("track_id", StringType()),
         StructField("track_name", StringType()),
@@ -26,49 +24,37 @@ def main():
         StructField("track_popularity", IntegerType()),
         StructField("event_id", StringType()),
         StructField("user_id", StringType()),
-        StructField("timestamp", DoubleType()),      # Epoch time
-        StructField("event_time_str", StringType()), # String time
+        StructField("timestamp", DoubleType()),
+        StructField("event_time_str", StringType()),
         StructField("location", StringType()),
         StructField("device", StringType()),
         StructField("listen_duration_ms", IntegerType()),
-        StructField("status", StringType())          # skipped / completed
+        StructField("status", StringType())
     ])
 
-    # 2. Đọc Stream từ Kafka
-    print(f"--> Listening to Kafka Topic: {TOPIC}...")
-    df_kafka = spark.readStream \
-        .format("kafka") \
+    # 2. Read Kafka
+    df_kafka = spark.readStream.format("kafka") \
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
         .option("subscribe", TOPIC) \
-        .option("startingOffsets", "latest") \
-        .load()
+        .option("startingOffsets", "latest").load()
 
-    # 3. Parse JSON & Transform
-    df_parsed = df_kafka.select(
-        F.from_json(F.col("value").cast("string"), event_schema).alias("data")
-    ).select("data.*")
-
-    # Thêm các cột dẫn xuất để tiện Analytics sau này
+    # 3. Transform
+    df_parsed = df_kafka.select(F.from_json(F.col("value").cast("string"), event_schema).alias("data")).select("data.*")
+    
     df_clean = df_parsed \
-        .withColumn("is_completed", F.when(F.col("status") == "completed", 1).otherwise(0)) \
-        .withColumn("is_skipped", F.when(F.col("status") == "skipped", 1).otherwise(0)) \
-        .withColumn("processed_time", F.current_timestamp())
+        .withColumn("processed_timestamp", F.current_timestamp()) \
+        .withColumn("is_completed", F.when(F.col("status") == "completed", 1).otherwise(0))
 
-    # In schema ra log để debug (chỉ hiện lúc khởi động)
-    print("--- Event Schema ---")
-    df_clean.printSchema()
-
-    # 4. Ghi vào MongoDB (Sink)
-    print("--> Streaming to MongoDB...")
+    # 4. Write to Elasticsearch
+    print("--> Streaming to Elasticsearch...")
     query = df_clean.writeStream \
-        .format("mongodb") \
-        .option("checkpointLocation", "/tmp/checkpoint/spotify_events") \
-        .option("forceDeleteTempCheckpointLocation", "true") \
-        .option("spark.mongodb.connection.uri", MONGO_URI) \
-        .option("spark.mongodb.database", "spotify_db") \
-        .option("spark.mongodb.collection", "playback_events") \
+        .format("org.elasticsearch.spark.sql") \
+        .option("checkpointLocation", "/tmp/checkpoint/spotify_es_stream") \
+        .option("es.nodes", ES_NODES) \
+        .option("es.port", ES_PORT) \
+        .option("es.resource", ES_RESOURCE) \
+        .option("es.nodes.wan.only", "true") \
         .outputMode("append") \
-        .trigger(processingTime='5 seconds') \
         .start()
 
     query.awaitTermination()
