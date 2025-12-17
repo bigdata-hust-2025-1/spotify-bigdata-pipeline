@@ -24,13 +24,8 @@ spec:
 
   deps:
     packages:
-<<<<<<< HEAD:spark_jobs/batch/run_artists_job.yaml
-      - org.apache.hadoop:hadoop-aws:3.3.4
-      - com.amazonaws:aws-java-sdk-bundle:1.12.262
-=======
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3
       - org.elasticsearch:elasticsearch-spark-30_2.12:7.17.9
->>>>>>> 67f3536 (Update code):spark_jobs/stream/run_stream_job.yaml
 
   driver:
     cores: 1
