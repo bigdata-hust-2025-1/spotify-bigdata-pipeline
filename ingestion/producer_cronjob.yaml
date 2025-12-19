@@ -18,9 +18,9 @@ spec:
             image: duongnguyen2204/spotify-producer:latest
             env:
             - name: SPOTIFY_CLIENT_ID
-              value: "f0c85d4810b2436a9a1845b6d8ce0054"
+              value: "ad3f7ef1be534e21aa3356fa126bf52f"
             - name: SPOTIFY_CLIENT_SECRET
-              value: "5b079f45e7fe4c1997f443734212f2bf"
+              value: "7de231f55f4a4532bedfc2e5ce4c9334"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka:9092"
             - name: KAFKA_TOPIC

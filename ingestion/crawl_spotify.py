@@ -12,8 +12,10 @@ from typing import List, Dict, Set
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "spotify_tracks") 
-LIMIT_PER_PAGE = int(os.getenv("LIMIT_PER_PAGE", "50")) 
+KAFKA_TOPIC_ALBUMS = os.getenv("KAFKA_TOPIC_ALBUMS", "spotify_albums")
+KAFKA_TOPIC_TRACKS = os.getenv("KAFKA_TOPIC_TRACKS", "spotify_tracks")
+KAFKA_TOPIC_ARTISTS = os.getenv("KAFKA_TOPIC_ARTISTS", "spotify_artists")
+LIMIT_PER_PAGE = int(os.getenv("LIMIT_PER_PAGE", "50"))
 
 if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
     raise EnvironmentError("SPOTIFY_CLIENT_ID và SPOTIFY_CLIENT_SECRET phải được thiết lập!")
@@ -160,7 +162,7 @@ def crawl_new_releases():
     # ==================== LẤY CHI TIẾT ARTISTS (BATCH) ====================
     print(f"\nTìm thấy {len(all_artist_ids)} artist duy nhất. Đang lấy thông tin chi tiết...")
     artist_ids_list = list(all_artist_ids)
-    simplified_artists: Dict[str, Dict] = {}
+    simplified_artists: List[Dict] = []
     
     # Batch 50 ID/lần (giới hạn của Spotify)
     for i in range(0, len(artist_ids_list), 50):
@@ -168,7 +170,7 @@ def crawl_new_releases():
         try:
             results = sp.artists(batch)
             for artist in results["artists"]:
-                simplified_artists[artist["id"]] = simplify_artist(artist)
+                simplified_artists.append(simplify_artist(artist))
             time.sleep(0.3)
         except spotipy.SpotifyException as e:
             print(f"[Spotify API Error for artists batch] {e.http_status} - {e.msg}")
@@ -179,38 +181,47 @@ def crawl_new_releases():
         except Exception as e:
             print(f"[Lỗi for artists batch] {e}")
     
-    # ==================== TẠO FINAL_DATA ====================
-    final_data = (
-        # simplified_albums 
-        simplified_tracks 
-        # + list(simplified_artists.values())
-    )
-    
     print(f"\nĐã lấy dữ liệu: Albums: {len(simplified_albums)}, Tracks: {len(simplified_tracks)}, Artists: {len(simplified_artists)}")
-    return final_data
+    return simplified_albums, simplified_tracks, simplified_artists
 
 # === VÒNG LẶP CHÍNH ===
 print("Spotify New Releases → Kafka Producer started...")
-print(f"   Topic    : {KAFKA_TOPIC}")
+print(f"   Topics: Albums: {KAFKA_TOPIC_ALBUMS}, Tracks: {KAFKA_TOPIC_TRACKS}, Artists: {KAFKA_TOPIC_ARTISTS}")
 print(f"   Limit per page: {LIMIT_PER_PAGE}")
 print(f"   Interval : 60 giây\n")
 
 while True:
     try:
-        data_items = crawl_new_releases()
+        simplified_albums, simplified_tracks, simplified_artists = crawl_new_releases()
 
-        if not data_items:
-            print("[Warning] Không có dữ liệu để gửi. Thử lại sau 60s...")
-        else:
-            sent = 0
-            for item in data_items:
-                producer.send(KAFKA_TOPIC, item)
-                item_type = item.get('type', 'unknown')
-                item_name = item.get('name', 'N/A')
-                print(f"Sent: {item_type} - {item_name}")
-                sent += 1
-            producer.flush()
-            print(f"Đã gửi {sent} items vào Kafka.\n")
+        sent = 0
+
+        # Gửi albums
+        for item in simplified_albums:
+            producer.send(KAFKA_TOPIC_ALBUMS, item)
+            item_type = item.get('type', 'unknown')
+            item_name = item.get('name', 'N/A')
+            print(f"Sent to {KAFKA_TOPIC_ALBUMS}: {item_type} - {item_name}")
+            sent += 1
+
+        # Gửi tracks
+        for item in simplified_tracks:
+            producer.send(KAFKA_TOPIC_TRACKS, item)
+            item_type = item.get('type', 'unknown')
+            item_name = item.get('name', 'N/A')
+            print(f"Sent to {KAFKA_TOPIC_TRACKS}: {item_type} - {item_name}")
+            sent += 1
+
+        # Gửi artists
+        for item in simplified_artists:
+            producer.send(KAFKA_TOPIC_ARTISTS, item)
+            item_type = item.get('type', 'unknown')
+            item_name = item.get('name', 'N/A')
+            print(f"Sent to {KAFKA_TOPIC_ARTISTS}: {item_type} - {item_name}")
+            sent += 1
+
+        producer.flush()
+        print(f"Đã gửi {sent} items vào Kafka.\n")
 
         time.sleep(60)
 
@@ -220,4 +231,4 @@ while True:
         break
     except Exception as e:
         print(f"[Lỗi nghiêm trọng] {e}")
-        time.sleep(10)
+        time.sleep(10) 
