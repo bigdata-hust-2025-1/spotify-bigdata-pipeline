@@ -6,8 +6,8 @@ import os
 
 
 # === Thiết lập client ===
-client_id = "f6f46db19c494385a1e6c5076d85f742"
-client_secret = "28ba343001834b51bbb830699592a47c"
+client_id = os.getenv("SPOTIFY_CLIENT_ID")
+client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
@@ -38,7 +38,7 @@ print(f"Tổng số category: {len(all_categories)}")
 global_seen_artist_ids = set()
 
 # === File JSON để ghi dần ===
-output_file = "all_artists_by_category_unique.json"
+output_file = "artists.json"
 
 # Khởi tạo file JSON rỗng hoặc đọc dữ liệu cũ (nếu có)
 if os.path.exists(output_file):
