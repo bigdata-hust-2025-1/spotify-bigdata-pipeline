@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: spotify-producer
+  namespace: bigdata
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: producer
+            image: duongnguyen2204/spotify-producer:latest
+            envFrom:
+            - secretRef:
+                name: spotify-secrets  # Sử dụng secret ở đây
+          restartPolicy: Never

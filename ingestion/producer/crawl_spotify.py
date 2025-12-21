@@ -184,51 +184,47 @@ def crawl_new_releases():
     print(f"\nĐã lấy dữ liệu: Albums: {len(simplified_albums)}, Tracks: {len(simplified_tracks)}, Artists: {len(simplified_artists)}")
     return simplified_albums, simplified_tracks, simplified_artists
 
-# === VÒNG LẶP CHÍNH ===
-print("Spotify New Releases → Kafka Producer started...")
+# === CHẠY MỘT LẦN DUY NHẤT ===
+print("Spotify New Releases → Kafka Producer started (batch mode)...")
 print(f"   Topics: Albums: {KAFKA_TOPIC_ALBUMS}, Tracks: {KAFKA_TOPIC_TRACKS}, Artists: {KAFKA_TOPIC_ARTISTS}")
-print(f"   Limit per page: {LIMIT_PER_PAGE}")
-print(f"   Interval : 60 giây\n")
+print(f"   Limit per page: {LIMIT_PER_PAGE}\n")
 
-while True:
-    try:
-        simplified_albums, simplified_tracks, simplified_artists = crawl_new_releases()
+try:
+    simplified_albums, simplified_tracks, simplified_artists = crawl_new_releases()
 
-        sent = 0
+    sent = 0
 
-        # Gửi albums
-        for item in simplified_albums:
-            producer.send(KAFKA_TOPIC_ALBUMS, item)
-            item_type = item.get('type', 'unknown')
-            item_name = item.get('name', 'N/A')
-            print(f"Sent to {KAFKA_TOPIC_ALBUMS}: {item_type} - {item_name}")
-            sent += 1
+    # Gửi albums
+    for item in simplified_albums:
+        producer.send(KAFKA_TOPIC_ALBUMS, item)
+        item_type = item.get('type', 'unknown')
+        item_name = item.get('name', 'N/A')
+        print(f"Sent to {KAFKA_TOPIC_ALBUMS}: {item_type} - {item_name}")
+        sent += 1
 
-        # Gửi tracks
-        for item in simplified_tracks:
-            producer.send(KAFKA_TOPIC_TRACKS, item)
-            item_type = item.get('type', 'unknown')
-            item_name = item.get('name', 'N/A')
-            print(f"Sent to {KAFKA_TOPIC_TRACKS}: {item_type} - {item_name}")
-            sent += 1
+    # Gửi tracks
+    for item in simplified_tracks:
+        producer.send(KAFKA_TOPIC_TRACKS, item)
+        item_type = item.get('type', 'unknown')
+        item_name = item.get('name', 'N/A')
+        print(f"Sent to {KAFKA_TOPIC_TRACKS}: {item_type} - {item_name}")
+        sent += 1
 
-        # Gửi artists
-        for item in simplified_artists:
-            producer.send(KAFKA_TOPIC_ARTISTS, item)
-            item_type = item.get('type', 'unknown')
-            item_name = item.get('name', 'N/A')
-            print(f"Sent to {KAFKA_TOPIC_ARTISTS}: {item_type} - {item_name}")
-            sent += 1
+    # Gửi artists
+    for item in simplified_artists:
+        producer.send(KAFKA_TOPIC_ARTISTS, item)
+        item_type = item.get('type', 'unknown')
+        item_name = item.get('name', 'N/A')
+        print(f"Sent to {KAFKA_TOPIC_ARTISTS}: {item_type} - {item_name}")
+        sent += 1
 
-        producer.flush()
-        print(f"Đã gửi {sent} items vào Kafka.\n")
+    producer.flush()
+    print(f"Đã gửi {sent} items vào Kafka.\n")
 
-        time.sleep(60)
+except Exception as e:
+    print(f"[Lỗi nghiêm trọng] {e}")
+    raise  # Raise để pod fail nếu error, CronJob sẽ retry theo backoffLimit
 
-    except KeyboardInterrupt:
-        print("\nDừng bởi người dùng. Đang thoát...")
-        producer.close()
-        break
-    except Exception as e:
-        print(f"[Lỗi nghiêm trọng] {e}")
-        time.sleep(10) 
+finally:
+    producer.close()  # Đảm bảo close producer dù success hay error
+    print("Batch crawl completed.")

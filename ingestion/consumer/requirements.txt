@@ -1,3 +1,4 @@
 # ingestion/requirements.txt
 spotipy==2.22.1
 kafka-python==2.0.2
+minio==7.2.7
