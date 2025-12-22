@@ -1,0 +1,25 @@
+# airflow-values.yaml
+executor: KubernetesExecutor
+
+postgresql:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: latest
+
+# Mount thư mục dags từ host (dùng đường dẫn bên trong Minikube VM)
+extraVolumes:
+  - name: dags-volume
+    hostPath:
+      path: /dags  # Đường dẫn bên trong VM (sẽ mount từ host)
+
+extraVolumeMounts:
+  - name: dags-volume
+    mountPath: /opt/airflow/dags
+
+# Cài thêm packages cần cho script
+extraPipPackages: |
+  spotipy==2.23.0
+  kafka-python==2.0.2
+  minio==7.2.0

@@ -8,8 +8,8 @@ import time
 from datetime import datetime
 from typing import List, Dict, Set
 from kafka.admin import KafkaAdminClient, NewTopic
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 # === CẤU HÌNH ===
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
