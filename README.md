@@ -1,262 +1,193 @@
-# 🎵 Spotify Big Data Analytics Platform (Lambda Architecture)
+# 🎵 Spotify Big Data Hybrid Platform  
+## Batch: Elasticsearch + Kibana | Stream: MongoDB + Streamlit
 
-Dự án **Big Data phân tích dữ liệu Spotify** được xây dựng theo kiến trúc **Lambda Architecture**, triển khai trên **Kubernetes (Minikube)**. Hệ thống kết hợp **Batch Processing** (xử lý dữ liệu lịch sử + ML) và **Stream Processing** (xử lý thời gian thực), phục vụ phân tích và trực quan hóa dữ liệu âm nhạc.
-
----
-
-## 📌 Mục tiêu dự án
-
-* Xây dựng **Data Lake** trên MinIO (S3-compatible)
-* Xử lý dữ liệu batch bằng **Apache Spark + Spark Operator**
-* Xử lý dữ liệu realtime bằng **Kafka + Spark Streaming**
-* Đồng bộ dữ liệu sang **Elasticsearch**
-* Trực quan hóa bằng **Kibana Dashboard**
-* Triển khai toàn bộ trên **Kubernetes (Minikube)**
+![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)
+![Apache Spark](https://img.shields.io/badge/Apache%20Spark-FDEE21?style=for-the-badge&logo=apachespark&logoColor=black)
+![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white)
+![ElasticSearch](https://img.shields.io/badge/-ElasticSearch-005571?style=for-the-badge&logo=elasticsearch)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 
 ---
 
-## 🏗️ Kiến trúc hệ thống
+## 📖 Giới thiệu
+
+Dự án Big Data xử lý dữ liệu âm nhạc Spotify theo kiến trúc  
+**Lambda Architecture (Hybrid)**.
+
+Hệ thống tách biệt công nghệ hiển thị để tối ưu tài nguyên:
+- **Kibana** cho phân tích dữ liệu lịch sử (Batch)
+- **Streamlit** cho giám sát dữ liệu thời gian thực (Streaming)
+
+---
+
+## 🎯 Mục tiêu dự án
+
+- Lưu trữ dữ liệu thô trên **MinIO (Data Lake)**
+- Xử lý **Batch ETL** bằng **Apache Spark**
+- Đồng bộ dữ liệu phân tích sang **Elasticsearch**
+- Xử lý **Streaming Real-time** với **Kafka + Spark Streaming**
+- Lưu dữ liệu streaming vào **MongoDB**
+- Trực quan hóa:
+  - Batch: **Kibana**
+  - Stream: **Streamlit Dashboard**
+
+---
+
+## 🏗️ Kiến trúc hệ thống (Hybrid Lambda Architecture)
 
 ```mermaid
 graph LR
-    subgraph SOURCES [Nguồn Dữ Liệu]
-        File[JSON Files] -->|Upload Script| MinIO
-        Sim[Python Producer] -->|Events| Kafka
+    subgraph SOURCES [Data Sources]
+        File[Spotify JSON Files] -->|Upload| MinIO
+        Producer[Python Producer] -->|Events| Kafka
     end
 
-    subgraph BATCH_LAYER [Batch Layer]
-        MinIO[(MinIO Data Lake)]
-        SparkBatch[Spark Batch ETL & ML]
-        MinIO --> SparkBatch
-        SparkBatch -->|Sync| ES[(Elasticsearch)]
+    subgraph BATCH [Batch Layer - Cold Path]
+        MinIO --> SparkBatch[Spark Batch ETL]
+        SparkBatch --> ES[Elasticsearch]
     end
 
-    subgraph SPEED_LAYER [Speed Layer]
-        Kafka[Apache Kafka]
-        SparkStream[Spark Streaming]
-        Kafka --> SparkStream
-        SparkStream -->|Write| ES
+    subgraph STREAM [Speed Layer - Hot Path]
+        Kafka --> SparkStream[Spark Streaming]
+        SparkStream --> Mongo[(MongoDB)]
     end
 
     subgraph SERVING [Serving Layer]
         ES --> Kibana[Kibana Dashboard]
+        Mongo --> Streamlit[Streamlit App]
     end
 ```
 
 ---
 
-## 🛠️ Yêu cầu tiên quyết (Prerequisites)
+## 🛠️ Prerequisites
 
-Đảm bảo máy đã cài đặt:
-
-* **Docker Desktop** (đang chạy)
-* **Minikube**
-* **kubectl**
-* **Helm**
-* **Python 3.x**
-
-  * Thư viện: `kafka-python`, `minio`
+| Công cụ | Phiên bản |
+|------|---------|
+| Docker Desktop | Latest |
+| Minikube | v1.30+ |
+| Helm | v3+ |
+| Python | 3.8+ |
 
 ---
 
-## 🚀 Phần 1: Khởi động hạ tầng (Infrastructure Setup)
+## 🚀 Phần 1: Khởi động Hạ tầng
 
-### 1️⃣ Khởi động Minikube
-
-```powershell
-minikube start --memory 6144 --cpus 4
-```
-
-> 🔔 Khuyến nghị: RAM ≥ **6GB** để chạy ổn định ELK Stack
-
----
-
-### 2️⃣ Cài đặt các dịch vụ nền tảng
+### 1. Start Minikube
+Yêu cầu RAM cao để chạy đồng thời ELK và MongoDB.
 
 ```powershell
-# Tạo namespace
-minikube kubectl -- apply -f kubernetes/namespace.yaml
-
-# Cài đặt MinIO, Kafka, ELK Stack
-minikube kubectl -- apply -f kubernetes/minio.yaml
-minikube kubectl -- apply -f kubernetes/kafka.yaml
-minikube kubectl -- apply -f kubernetes/elk.yaml
+minikube start --memory 7168 --cpus 4
 ```
 
 ---
 
-### 3️⃣ Cài đặt Spark Operator
+### 2. Deploy các dịch vụ nền tảng
+
+```powershell
+# Namespace
+kubectl apply -f kubernetes/namespace.yaml
+
+# Messaging & Storage
+kubectl apply -f kubernetes/minio.yaml
+kubectl apply -f kubernetes/kafka.yaml
+
+# Serving Databases
+kubectl apply -f kubernetes/elk.yaml
+kubectl apply -f kubernetes/mongodb.yaml
+```
+
+---
+
+### 3. Cài Spark Operator
 
 ```powershell
 helm repo add spark-operator https://kubeflow.github.io/spark-operator
 helm repo update
 
-helm install my-release spark-operator/spark-operator \
-  --namespace bigdata \
-  --set webhook.enable=false \
+helm install spark-operator spark-operator/spark-operator `
+  --namespace bigdata `
+  --set webhook.enable=false `
   --set sparkJobNamespace=""
 ```
 
-👉 Spark Operator chịu trách nhiệm quản lý tài nguyên `SparkApplication` trong Kubernetes.
-
 ---
 
-### 4️⃣ Build & Push Docker Image Spark
+### 4. Build & Push Docker Image
+Thay `your_dockerhub` bằng Docker Hub username của bạn.
 
 ```powershell
 docker login
-docker build -t xuanbinh282/spotify-spark-jobs:v1 .
-docker push xuanbinh282/spotify-spark-jobs:v1
+docker build -t your_dockerhub/spotify-spark-jobs:v1 .
+docker push your_dockerhub/spotify-spark-jobs:v1
 ```
-
-> ⚠️ Thay `k67ithust` bằng Docker Hub username của bạn nếu khác.
 
 ---
 
 ## 🔌 Phần 2: Port Forwarding (BẮT BUỘC)
 
-⚠️ **Mở 3 tab PowerShell riêng biệt và giữ chạy liên tục trong lúc demo**
-
-### 🔹 Tab 1 – MinIO (Data Lake)
+Mở **4 terminal PowerShell riêng biệt** và giữ nguyên trong lúc demo.
 
 ```powershell
-minikube kubectl -- port-forward svc/minio -n bigdata 9000:9000
+# MinIO
+kubectl port-forward svc/minio -n bigdata 9000:9000
+
+# Kafka
+kubectl port-forward svc/kafka -n bigdata 9092:9092
+
+# MongoDB
+kubectl port-forward svc/mongodb -n bigdata 27017:27017
+
+# Kibana
+kubectl port-forward svc/kibana -n bigdata 5601:5601
 ```
-
-* Web UI: [http://localhost:9001](http://localhost:9001) (nếu mở thêm port 9001)
-
----
-
-### 🔹 Tab 2 – Kafka
-
-```powershell
-minikube kubectl -- port-forward svc/kafka -n bigdata 19092:19092
-```
-
----
-
-### 🔹 Tab 3 – Kibana
-
-```powershell
-minikube kubectl -- port-forward svc/kibana -n bigdata 5601:5601
-```
-
-* Truy cập: [http://localhost:5601](http://localhost:5601)
 
 ---
 
 ## 🎬 Phần 3: Kịch bản Demo
 
----
-
-### 🅰️ Batch Processing (Xử lý lịch sử)
-
-#### Bước 1: Ingestion – Upload dữ liệu thô
+### 🅰️ Demo Batch Processing (Elasticsearch + Kibana)
 
 ```powershell
 python upload_to_bronze.py
+
+kubectl apply -f spark_jobs/batch/yaml/run_bronze_to_silver.yaml
+kubectl apply -f spark_jobs/batch/yaml/run_silver_to_gold.yaml
+kubectl apply -f spark_jobs/batch/yaml/run_gold_to_es.yaml
 ```
+
+Truy cập Kibana: http://localhost:5601  
+Index Pattern: `batch_artists*`
 
 ---
 
-#### Bước 2: Chạy Spark Batch Jobs
+### 🅱️ Demo Stream Processing (MongoDB + Streamlit)
 
 ```powershell
-# Bronze → Silver (Làm sạch)
-minikube kubectl -- delete sparkapplication batch-bronze-to-silver -n bigdata
-minikube kubectl -- apply -f spark_jobs/batch/yaml/run_bronze_to_silver.yaml
-
-# Silver → Gold (Analytics)
-minikube kubectl -- delete sparkapplication batch-silver-to-gold -n bigdata
-minikube kubectl -- apply -f spark_jobs/batch/yaml/run_silver_to_gold.yaml
-
-# Machine Learning – KMeans Clustering
-minikube kubectl -- delete sparkapplication batch-ml-clustering -n bigdata
-minikube kubectl -- apply -f spark_jobs/batch/yaml/run_ml_clustering.yaml
+kubectl apply -f spark_jobs/stream/run_stream_mongo.yaml
+kubectl get pods -n bigdata -w
 ```
 
----
-
-#### Bước 3: Đồng bộ dữ liệu sang Elasticsearch
-
-```powershell
-minikube kubectl -- delete sparkapplication batch-gold-to-es -n bigdata
-minikube kubectl -- apply -f spark_jobs/batch/yaml/run_gold_to_es.yaml
-```
-
----
-
-### 🅱️ Stream Processing (Thời gian thực)
-
-#### Bước 1: Chạy Spark Streaming Job
-
-```powershell
-minikube kubectl -- delete sparkapplication spotify-streaming-job -n bigdata
-minikube kubectl -- apply -f spark_jobs/stream/run_stream_job.yaml
-```
-
-Theo dõi pod:
-
-```powershell
-minikube kubectl -- get pods -n bigdata -w
-```
-
----
-
-#### Bước 2: Bắn dữ liệu giả lập vào Kafka
-
+Bắn dữ liệu giả lập:
 ```powershell
 python spark_jobs/stream/produce_to_kafka.py
 ```
 
-Bạn sẽ thấy log kiểu:
-
+Chạy dashboard:
+```powershell
+streamlit run dashboard_app.py
 ```
-User X listened to track Y
-```
-
----
-
-## 📊 Phần 4: Trực quan hóa (Visualization)
-
-1. Truy cập **Kibana**: [http://localhost:5601](http://localhost:5601)
-2. Vào **Stack Management → Index Patterns**
-3. Tạo Index Pattern:
-
-   * Batch: `batch_artists*`
-   * Stream: `realtime_events*`
-
-     * Time field: `processed_timestamp`
-4. Vào **Dashboard** để xem dữ liệu realtime & batch
 
 ---
 
 ## ❓ Troubleshooting
 
-| Lỗi                             | Nguyên nhân         | Cách khắc phục                      |
-| ------------------------------- | ------------------- | ----------------------------------- |
-| Connection Refused              | Chưa port-forward   | Kiểm tra lại các tab PowerShell     |
-| TLS Handshake Timeout           | Thiếu RAM/CPU       | Restart Minikube với RAM lớn hơn    |
-| CrashLoopBackOff (Spark)        | Lỗi quyền namespace | Xóa pod operator để restart         |
-| No FileSystem for scheme s3a    | Thiếu dependency    | Kiểm tra `hadoop-aws` & `aws-sdk`   |
-| Permission Denied (/home/spark) | Ivy cache lỗi       | Đảm bảo `spark.jars.ivy=/tmp/.ivy2` |
+| Lỗi | Nguyên nhân | Cách khắc phục |
+|---|---|---|
+| Waiting for data... | Producer chưa chạy | Kiểm tra producer & Mongo collection |
+| Kibana trống | Batch chưa sync | Chạy lại job gold-to-es |
+| TLS handshake timeout | Thiếu RAM | Tăng RAM Minikube > 7GB |
+| CrashLoopBackOff | Thiếu quyền | Cấp cluster-admin cho Operator |
 
 ---
 
-## ✅ Kết luận
-
-Dự án mô phỏng **hệ thống Big Data production** với:
-
-* Kubernetes
-* Spark Operator
-* MinIO (S3)
-* Kafka
-* Elasticsearch + Kibana
-
-Phù hợp cho:
-
-* Đồ án Big Data
-* Demo CV / Portfolio
-* Học Kubernetes + Spark thực tế
-
-🎉 **Chúc bạn demo thành công!**
