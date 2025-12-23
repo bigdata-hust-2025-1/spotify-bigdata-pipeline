@@ -1,8 +1,8 @@
 import os
 import sys
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, concat_ws, expr, lit, when
-from pyspark.sql.types import StructType, ArrayType
+from pyspark.sql.functions import col, concat_ws, expr, lit, udf
+from pyspark.sql.types import StructType, ArrayType, StringType
 
 # Lấy cấu hình từ biến môi trường
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://host.docker.internal:9000")
@@ -11,12 +11,29 @@ SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 BRONZE_BUCKET = "s3a://spotify-bronze"
 SILVER_BUCKET = "s3a://spotify-silver"
+<<<<<<< HEAD
 INGEST_DATE = "2025-12-21" # Cập nhật ngày đúng của bạn
+=======
+INGEST_DATE = "2025-12-06" 
+
+# --- [ADVANCED] Custom UDF: Phân loại độ dài bài hát ---
+# Yêu cầu: Custom UDFs for specific business logic
+def categorize_duration(ms):
+    if not ms: return "Unknown"
+    sec = ms / 1000
+    if sec < 180: return "Short"    # Dưới 3 phút
+    elif sec < 300: return "Medium" # 3-5 phút
+    else: return "Long"             # Trên 5 phút
+
+# Đăng ký UDF với Spark
+duration_udf = udf(categorize_duration, StringType())
+# -------------------------------------------------------
+>>>>>>> de7d1de (Add streaming jobs and update batch & kafka configs)
 
 def get_spark_session():
     print(f"Connecting to MinIO at: {MINIO_ENDPOINT}")
     return SparkSession.builder \
-        .appName("Spotify_Bronze_To_Silver") \
+        .appName("Spotify_Bronze_To_Silver_Advanced") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT) \
         .config("spark.hadoop.fs.s3a.access.key", ACCESS_KEY) \
         .config("spark.hadoop.fs.s3a.secret.key", SECRET_KEY) \
@@ -27,31 +44,19 @@ def get_spark_session():
 
 def process_dataset(spark, dataset_name, transform_func):
     print(f"\n=== PROCESSING: {dataset_name} ===")
-    
-    # Trỏ vào thư mục chứa file
     input_path = f"{BRONZE_BUCKET}/{dataset_name}/ingest_date={INGEST_DATE}"
     output_path = f"{SILVER_BUCKET}/{dataset_name}/ingest_date={INGEST_DATE}"
     
     try:
         print(f"--> Reading directory: {input_path}")
         df = spark.read.option("multiline", "true").json(input_path)
-        
-        count = df.count()
-        print(f"    -> Found {count} records.")
-        if count == 0:
-            print("    [WARN] Dataframe is empty, skipping.")
-            return
-
-        # IN SCHEMA ĐỂ DEBUG LỖI
-        print(f"--- Schema of {dataset_name} ---")
-        df.printSchema()
-        # ------------------------------------
+        if df.count() == 0: return
 
         df_clean = transform_func(df)
         
         print(f"--> Writing to: {output_path}")
         df_clean.write.mode("overwrite").parquet(output_path)
-        print(f"    [OK] {dataset_name} processed successfully.")
+        print(f"    [OK] {dataset_name} processed.")
         
     except Exception as e:
         print(f"!!! ERROR processing {dataset_name}: {str(e)}")
@@ -68,6 +73,9 @@ def transform_tracks(df):
         col("track_number"),
         col("duration_ms"),
         (col("duration_ms") / 1000).alias("duration_sec"),
+        # --- [ADVANCED] Áp dụng UDF ---
+        duration_udf(col("duration_ms")).alias("duration_category"),
+        # ------------------------------
         col("explicit"),
         col("popularity"),
         col("release_date"),
@@ -119,15 +127,9 @@ def transform_playlists(df):
         col("snapshot_id"),
         col("type")
     ]
-
-    # Xử lý an toàn cho followers.total
-    if "followers" in cols:
-        # Chúng ta thử access, nếu lỗi thì điền null
-        select_exprs.append(col("followers.total").alias("followers_total"))
-    else:
-        select_exprs.append(lit(None).alias("followers_total"))
-
-    # Xử lý an toàn cho owner
+    # Xử lý an toàn cho cột thiếu
+    select_exprs.append(col("followers.total").alias("followers_total") if "followers" in cols else lit(None).alias("followers_total"))
+    
     if "owner" in cols:
         select_exprs.append(col("owner.id").alias("owner_id"))
         select_exprs.append(col("owner.display_name").alias("owner_display_name"))
@@ -137,7 +139,6 @@ def transform_playlists(df):
         select_exprs.append(lit(None).alias("owner_display_name"))
         select_exprs.append(lit(None).alias("owner_type"))
 
-    # Xử lý an toàn cho primary_color
     if "primary_color" in cols:
         select_exprs.append(col("primary_color"))
     else:
@@ -147,12 +148,9 @@ def transform_playlists(df):
 
 if __name__ == "__main__":
     spark = get_spark_session()
-    
     process_dataset(spark, "tracks", transform_tracks)
     process_dataset(spark, "albums", transform_albums)
     process_dataset(spark, "artists", transform_artists)
     process_dataset(spark, "owners", transform_owners)
     process_dataset(spark, "playlists", transform_playlists)
-    
     spark.stop()
-    print("\n>>> ALL JOBS FINISHED <<<")

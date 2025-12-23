@@ -1,0 +1,8 @@
+minio
+kafka-python
+elasticsearch==7.17.9
+pandas
+streamlit
+plotly
+watchdog
+pyspark==3.5.3

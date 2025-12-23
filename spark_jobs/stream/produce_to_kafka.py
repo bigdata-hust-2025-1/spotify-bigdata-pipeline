@@ -7,8 +7,13 @@ from kafka import KafkaProducer
 
 # Cấu hình Kafka
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
+<<<<<<< HEAD
 TOPIC_NAME = 'spotify_playback_events'  # Đổi tên topic cho đúng ngữ nghĩa
 DATA_FILE_PATH = r"D:\semester2025.1\BigData\project\spotify-bigdata-pipeline\data\tracks.json"
+=======
+TOPIC_NAME = 'spotify_playback_events'
+DATA_FILE_PATH = r"D:\Big_Data_For_School\data\tracks.json"
+>>>>>>> de7d1de (Add streaming jobs and update batch & kafka configs)
 
 # Cấu hình giả lập
 LOCATIONS = ['VN', 'US', 'UK', 'KR', 'JP', 'DE']
@@ -35,11 +40,22 @@ def generate_event(track):
     
     # 1. Logic giả lập thời gian nghe
     total_duration = track.get('duration_ms', 0)
-    # Random nghe từ 10 giây đến hết bài
-    listened_ms = random.randint(10000, total_duration)
     
-    # Xác định trạng thái: Nếu nghe > 90% thời lượng thì coi là 'completed'
-    status = 'completed' if listened_ms >= (total_duration * 0.8) else 'skipped'
+    # --- [FIX LỖI] Xử lý bài hát quá ngắn (< 10s) ---
+    if total_duration <= 10000:
+        # Nếu bài ngắn hơn 10s thì coi như nghe hết bài
+        listened_ms = total_duration
+    else:
+        # Nếu bài dài thì random từ 10s đến hết bài
+        listened_ms = random.randint(10000, total_duration)
+    # ------------------------------------------------
+    
+    # Xác định trạng thái: Nếu nghe > 80% thời lượng thì coi là 'completed'
+    # Lưu ý: Chia cho 0 sẽ lỗi nên cần check total_duration > 0
+    if total_duration > 0 and listened_ms >= (total_duration * 0.5):
+        status = 'completed'
+    else:
+        status = 'skipped'
 
     # 2. Tạo bản tin Event
     event = {
@@ -52,8 +68,8 @@ def generate_event(track):
         
         # --- Event Data (Giả lập) ---
         "event_id": str(uuid.uuid4()),
-        "user_id": f"user_{random.randint(1, 500)}", # Giả lập 500 user
-        "timestamp": time.time(),                    # Thời gian thực
+        "user_id": f"user_{random.randint(1, 500)}", 
+        "timestamp": time.time(),
         "event_time_str": time.strftime("%Y-%m-%d %H:%M:%S"),
         "location": random.choice(LOCATIONS),
         "device": random.choice(DEVICES),
@@ -88,7 +104,7 @@ def main():
                   f"nghe '{event['track_name']}' trên {event['device']} "
                   f"[{event['status']}]")
             
-            # Random tốc độ bắn tin (0.1s - 1s một tin) -> Tốc độ cao hơn để thấy chart nhảy
+            # Random tốc độ bắn tin
             time.sleep(random.uniform(0.1, 1.0))
 
     except KeyboardInterrupt:
