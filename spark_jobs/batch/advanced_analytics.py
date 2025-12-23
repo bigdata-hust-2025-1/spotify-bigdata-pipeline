@@ -10,7 +10,7 @@ ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 # Ngày dữ liệu (Sửa lại cho đúng ngày bạn đã ingest)
-INGEST_DATE = "2025-12-06"  
+INGEST_DATE = "2025-12-21"  
 
 SILVER_PATH = f"s3a://spotify-silver/tracks/ingest_date={INGEST_DATE}"
 GOLD_PATH = f"s3a://spotify-gold/ml_clustering/ingest_date={INGEST_DATE}"

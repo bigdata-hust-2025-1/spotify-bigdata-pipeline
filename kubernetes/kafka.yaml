@@ -88,8 +88,6 @@ spec:
         - containerPort: 9092   # INTERNAL listener
         - containerPort: 19092  # EXTERNAL listener (cho test host)
         env:
-        - name: KAFKA_BROKER_ID
-          value: "1"
         - name: KAFKA_ZOOKEEPER_CONNECT
           value: "zookeeper:2181"
         - name: KAFKA_LISTENERS

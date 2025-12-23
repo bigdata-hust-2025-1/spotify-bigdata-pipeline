@@ -8,7 +8,7 @@ ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 # --- HÃY KIỂM TRA NGÀY TRÊN MINIO CỦA BẠN ---
-INGEST_DATE = "2025-12-06" 
+INGEST_DATE = "2025-12-21" 
 
 def main():
     spark = (

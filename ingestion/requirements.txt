@@ -1,0 +1,4 @@
+spotipy==2.23.0
+kafka-python
+minio==7.2.8
+python-dotenv

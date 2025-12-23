@@ -11,7 +11,7 @@ SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 BRONZE_BUCKET = "s3a://spotify-bronze"
 SILVER_BUCKET = "s3a://spotify-silver"
-INGEST_DATE = "2025-12-06" # Cập nhật ngày đúng của bạn
+INGEST_DATE = "2025-12-21" # Cập nhật ngày đúng của bạn
 
 def get_spark_session():
     print(f"Connecting to MinIO at: {MINIO_ENDPOINT}")

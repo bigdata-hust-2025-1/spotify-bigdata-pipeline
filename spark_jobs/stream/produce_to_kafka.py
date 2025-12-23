@@ -8,7 +8,7 @@ from kafka import KafkaProducer
 # Cấu hình Kafka
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
 TOPIC_NAME = 'spotify_playback_events'  # Đổi tên topic cho đúng ngữ nghĩa
-DATA_FILE_PATH = r"D:\Big_Data_For_School\data\tracks.json"
+DATA_FILE_PATH = r"D:\semester2025.1\BigData\project\spotify-bigdata-pipeline\data\tracks.json"
 
 # Cấu hình giả lập
 LOCATIONS = ['VN', 'US', 'UK', 'KR', 'JP', 'DE']

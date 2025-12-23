@@ -1,0 +1,13 @@
+FROM apache/airflow:2.9.0-python3.10
+
+USER root
+WORKDIR /opt/airflow
+
+# Copy toàn bộ repo vào đúng đường dẫn mà DAG đang trỏ tới
+COPY . /opt/airflow/spotify-bigdata-pipeline
+
+# Cài thêm requirements riêng cho ingestion (nếu có; bỏ qua lỗi nếu file trống)
+RUN pip install --no-cache-dir -r /opt/airflow/spotify-bigdata-pipeline/ingestion/requirements.txt || true
+
+USER airflow
+ENV SPOTIFY_PIPELINE_ROOT=/opt/airflow/spotify-bigdata-pipeline

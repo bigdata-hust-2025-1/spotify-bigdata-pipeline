@@ -6,7 +6,7 @@ from minio_client import get_minio_client
 BRONZE_BUCKET = "spotify-bronze"
 
 # TODO: chỉnh thư mục chứa các file json 
-LOCAL_DATA_DIR = r"D:\Big_Data_For_School\data"   # ví dụ, thay bằng đường dẫn thật
+LOCAL_DATA_DIR = r"D:\semester2025.1\BigData\project\spotify-bigdata-pipeline\data"   # ví dụ, thay bằng đường dẫn thật
 
 def ensure_bucket(client, bucket_name: str):
     if not client.bucket_exists(bucket_name):
@@ -14,7 +14,6 @@ def ensure_bucket(client, bucket_name: str):
         print(f"Created bucket: {bucket_name}")
     else:
         print(f"Bucket exists: {bucket_name}")
-
 
 def main():
     client = get_minio_client()

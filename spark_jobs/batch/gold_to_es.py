@@ -6,7 +6,7 @@ ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 ES_NODES = "elasticsearch.bigdata"
 ES_PORT = "9200"
-INGEST_DATE = "2025-12-06" # Cập nhật ngày đúng
+INGEST_DATE = "2025-12-21" # Cập nhật ngày đúng
 
 def main():
     spark = SparkSession.builder.appName("GoldToES") \

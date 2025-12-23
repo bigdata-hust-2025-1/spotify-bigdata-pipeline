@@ -7,7 +7,7 @@ BRONZE_BUCKET = "spotify-bronze"
 SILVER_BUCKET = "spotify-silver"
 
 # SỬA CHO ĐÚNG NGÀY KHI DÙNG LẠI KHI UPLOAD
-INGEST_DATE = "2025-11-29"
+INGEST_DATE = "2025-12-19"
 
 def ensure_bucket(client: Minio, bucket_name: str):
     if not client.bucket_exists(bucket_name):

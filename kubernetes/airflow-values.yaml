@@ -1,0 +1,160 @@
+# ===============================
+# 1. EXECUTOR
+# ===============================
+executor: KubernetesExecutor
+
+# ===============================
+# 2. AIRFLOW IMAGE
+# ===============================
+airflow:
+  image:
+    repository: apache/airflow
+    tag: 2.9.3-python3.10
+    pullPolicy: IfNotPresent
+
+# ===============================
+# 3. AIRFLOW CORE CONFIG
+# ===============================
+config:
+  core:
+    load_examples: "False"
+    dags_are_paused_at_creation: "False"
+    executor: KubernetesExecutor
+  logging:
+    logging_level: INFO
+
+# ===============================
+# 4. DAGs (PERSISTENCE)
+# ===============================
+dags:
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: standard
+  gitSync:
+    enabled: false
+
+# ===============================
+# 5. LOGS (PERSISTENCE)
+# ===============================
+logs:
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: standard
+
+# ===============================
+# 6. DATABASE (PostgreSQL - embedded)
+# ===============================
+postgresql:
+  enabled: false
+  # image:
+  #   registry: docker.io
+  #   repository: bitnami/postgresql
+  #   tag: "16"
+  #   pullPolicy: IfNotPresent
+  # auth:
+  #   username: airflow
+  #   password: airflow
+  #   database: airflow
+
+# ===================================
+data:
+  metadataConnection:
+    protocol: postgresql
+    host: airflow-postgres.airflow.svc.cluster.local
+    port: 5432
+    db: airflow
+    user: airflow
+    pass: airflow
+
+
+
+# ===============================
+# 7. REDIS (KHÔNG CẦN vì dùng KubernetesExecutor)
+# ===============================
+redis:
+  enabled: false
+
+# ===============================
+# 8. KUBERNETES EXECUTOR CONFIG
+# ===============================
+kubernetesExecutor:
+  namespace: airflow
+
+  # Pod template cho task
+  podTemplate:
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+apiServer:
+  resources:
+    requests:
+      cpu: "300m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+scheduler:
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+dagProcessor:
+  resources:
+    requests:
+      cpu: "300m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# ===============================
+# 9. ENVIRONMENT VARIABLES
+# (DÙNG CHUNG CHO DAGs)
+# ===============================
+env:
+  - name: KAFKA_BOOTSTRAP_SERVERS
+    value: kafka.bigdata.svc.cluster.local:9092
+
+  - name: MINIO_ENDPOINT
+    value: http://minio.bigdata.svc.cluster.local:9000
+
+  - name: MINIO_ACCESS_KEY
+    value: minioadmin
+
+  - name: MINIO_SECRET_KEY
+    value: miniopass123
+
+  - name: AIRFLOW__CORE__ENABLE_XCOM_PICKLING
+    value: "False"
+
+# ===============================
+# 10. WEBSERVER
+# ===============================
+webserver:
+  replicas: 1
+  service:
+    type: ClusterIP
+
+# ===============================
+# 11. SCHEDULER
+# ===============================
+scheduler:
+  replicas: 1
+
+# ===============================
+# 12. TRIGGERER (cho deferrable tasks – bật sẵn)
+# ===============================
+triggerer:
+  enabled: true
+  replicas: 1

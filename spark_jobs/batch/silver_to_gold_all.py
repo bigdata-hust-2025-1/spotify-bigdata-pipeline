@@ -11,7 +11,7 @@ ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 # --- NGÀY DỮ LIỆU ---
-INGEST_DATE = "2025-12-06"
+INGEST_DATE = "2025-12-21"
 
 SILVER = "s3a://spotify-silver"
 GOLD = "s3a://spotify-gold"

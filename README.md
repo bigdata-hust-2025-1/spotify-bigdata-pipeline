@@ -105,8 +105,8 @@ helm install my-release spark-operator/spark-operator \
 
 ```powershell
 docker login
-docker build -t k67ithust/spotify-spark-jobs:v1 .
-docker push k67ithust/spotify-spark-jobs:v1
+docker build -t xuanbinh282/spotify-spark-jobs:v1 .
+docker push xuanbinh282/spotify-spark-jobs:v1
 ```
 
 > ⚠️ Thay `k67ithust` bằng Docker Hub username của bạn nếu khác.
@@ -130,7 +130,7 @@ minikube kubectl -- port-forward svc/minio -n bigdata 9000:9000
 ### 🔹 Tab 2 – Kafka
 
 ```powershell
-minikube kubectl -- port-forward svc/kafka -n bigdata 9092:9092
+minikube kubectl -- port-forward svc/kafka -n bigdata 19092:19092
 ```
 
 ---

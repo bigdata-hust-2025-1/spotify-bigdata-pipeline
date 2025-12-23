@@ -9,7 +9,6 @@ if os.path.exists(".cache"):
     os.remove(".cache")
     print("Đã xóa file .cache cũ")
 
-
 # === Thiết lập client ===
 client_id = os.getenv("SPOTIFY_CLIENT_ID")
 client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -19,7 +18,6 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=client_id,
     client_secret=client_secret
 ))
-
 
 # === Đọc file flattened albums ===
 input_file = "albums.json"

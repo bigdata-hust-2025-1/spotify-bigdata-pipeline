@@ -7,7 +7,7 @@ spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
-  image: "k67ithust/spotify-spark-jobs:v1"
+  image: "xuanbinh282/spotify-spark-jobs:v1"
   imagePullPolicy: Always
   
   # Đường dẫn file code trong Image
