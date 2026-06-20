@@ -13,8 +13,9 @@ public class AnomalyDetectionJob {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         
         // Kết nối đến Kafka
+        String kafkaBroker = System.getenv().getOrDefault("KAFKA_BROKER", "kafka.bigdata:9092");
         Properties properties = new Properties();
-        properties.setProperty("bootstrap.servers", "kafka:9092");
+        properties.setProperty("bootstrap.servers", kafkaBroker);
         properties.setProperty("group.id", "anomaly-detection-group");
         
         // Tiêu thụ luồng dữ liệu hành vi người dùng từ topic Kafka

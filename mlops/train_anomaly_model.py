@@ -1,10 +1,12 @@
+import os
 import mlflow
 import mlflow.sklearn
 from sklearn.ensemble import IsolationForest
 import pandas as pd
 
 # Kết nối với MLflow Tracking Server (trong hệ sinh thái MLOps)
-mlflow.set_tracking_uri("http://mlflow-server:5000")
+MLFLOW_URL = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow-server.bigdata:5000")
+mlflow.set_tracking_uri(MLFLOW_URL)
 
 def train_model(data_path):
     # Khởi tạo một phiên theo dõi trải nghiệm huấn luyện mô hình
