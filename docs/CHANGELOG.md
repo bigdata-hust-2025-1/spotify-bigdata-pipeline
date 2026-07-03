@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this repository are documented here. Entries are grouped
-by the roadmap PR they implement (see `docs/IMPLEMENTATION_ROADMAP.md`).
+by the roadmap PR they implement.
 
 ## PR-01 — Resolve merge conflicts + add conflict-marker CI guard
 
@@ -10,7 +10,7 @@ by the roadmap PR they implement (see `docs/IMPLEMENTATION_ROADMAP.md`).
 ### Context
 Three core pipeline files were committed to `main` containing unresolved Git
 merge conflict markers, making them invalid Python and taking the batch and
-stream-producer paths offline (see `docs/ARCHITECTURE_REVIEW.md`, finding A1).
+stream-producer paths offline (architecture design review, finding A1).
 
 ### Changed
 - **`spark_jobs/batch/bronze_to_silver_all.py`** — resolved the conflict by
