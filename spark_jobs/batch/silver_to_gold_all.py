@@ -8,14 +8,12 @@ from pyspark.sql.window import Window # [ADVANCED]
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
 ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
-<<<<<<< HEAD
 
 # --- NGÀY DỮ LIỆU ---
-INGEST_DATE = "2025-12-21"
+# Mặc định 2025-12-21 để đồng bộ với các job batch khác; override qua biến
+# môi trường INGEST_DATE (vd: Airflow truyền {{ ds }}).
+INGEST_DATE = os.getenv("INGEST_DATE", "2025-12-21")
 
-=======
-INGEST_DATE = "2025-12-06"
->>>>>>> de7d1de (Add streaming jobs and update batch & kafka configs)
 SILVER = "s3a://spotify-silver"
 GOLD = "s3a://spotify-gold"
 

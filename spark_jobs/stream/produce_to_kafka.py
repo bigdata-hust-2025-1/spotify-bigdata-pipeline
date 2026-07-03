@@ -7,13 +7,15 @@ from kafka import KafkaProducer
 
 # Cấu hình Kafka
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
-<<<<<<< HEAD
-TOPIC_NAME = 'spotify_playback_events'  # Đổi tên topic cho đúng ngữ nghĩa
-DATA_FILE_PATH = r"D:\semester2025.1\BigData\project\spotify-bigdata-pipeline\data\tracks.json"
-=======
-TOPIC_NAME = 'spotify_playback_events'
-DATA_FILE_PATH = r"D:\Big_Data_For_School\data\tracks.json"
->>>>>>> de7d1de (Add streaming jobs and update batch & kafka configs)
+TOPIC_NAME = 'spotify_playback_events'  # Topic cho luồng sự kiện nghe nhạc
+
+# Đường dẫn file dữ liệu track. Mặc định trỏ tới data/tracks.json trong repo
+# (portable, suy ra từ vị trí file này) thay vì đường dẫn tuyệt đối cứng.
+# Có thể override qua biến môi trường TRACKS_DATA_PATH.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+DATA_FILE_PATH = os.getenv(
+    "TRACKS_DATA_PATH", os.path.join(_REPO_ROOT, "data", "tracks.json")
+)
 
 # Cấu hình giả lập
 LOCATIONS = ['VN', 'US', 'UK', 'KR', 'JP', 'DE']
