@@ -74,3 +74,16 @@ graph TD
 * `/docs`: Tài liệu chuẩn bị phỏng vấn, kiến trúc và concept.
 
 *(📝 Xem giải thích kỹ thuật và các quyết định kiến trúc tại `/docs/INTERVIEW_DOCUMENTATION.md`)*
+
+---
+
+## ⚙️ Cấu hình (Environment Variables)
+
+Các job đọc cấu hình từ biến môi trường để không phụ thuộc vào máy cụ thể. Các biến sau được thêm/chuẩn hoá gần đây:
+
+| Biến | Mặc định | Dùng bởi | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `INGEST_DATE` | `2025-12-21` | `spark_jobs/batch/bronze_to_silver_all.py`, `silver_to_gold_all.py` | Ngày partition dữ liệu cần xử lý. Airflow có thể truyền `{{ ds }}`. |
+| `TRACKS_DATA_PATH` | `<repo>/data/tracks.json` | `spark_jobs/stream/produce_to_kafka.py` | Đường dẫn file track cho producer (mặc định trỏ vào repo, portable). |
+
+*(Chi tiết thay đổi theo từng PR: xem `/docs/CHANGELOG.md`. Lộ trình cải tiến: `/docs/IMPLEMENTATION_ROADMAP.md`.)*
