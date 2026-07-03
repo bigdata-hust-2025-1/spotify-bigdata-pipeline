@@ -11,10 +11,10 @@ SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
 
 BRONZE_BUCKET = "s3a://spotify-bronze"
 SILVER_BUCKET = "s3a://spotify-silver"
-<<<<<<< HEAD
-INGEST_DATE = "2025-12-21" # Cập nhật ngày đúng của bạn
-=======
-INGEST_DATE = "2025-12-06" 
+# Ngày ingest của dữ liệu cần xử lý. Mặc định 2025-12-21 để đồng bộ với các job
+# batch khác (advanced_analytics.py, gold_to_es.py). Có thể override qua biến
+# môi trường INGEST_DATE (vd: Airflow truyền {{ ds }}).
+INGEST_DATE = os.getenv("INGEST_DATE", "2025-12-21")
 
 # --- [ADVANCED] Custom UDF: Phân loại độ dài bài hát ---
 # Yêu cầu: Custom UDFs for specific business logic
@@ -28,7 +28,6 @@ def categorize_duration(ms):
 # Đăng ký UDF với Spark
 duration_udf = udf(categorize_duration, StringType())
 # -------------------------------------------------------
->>>>>>> de7d1de (Add streaming jobs and update batch & kafka configs)
 
 def get_spark_session():
     print(f"Connecting to MinIO at: {MINIO_ENDPOINT}")
