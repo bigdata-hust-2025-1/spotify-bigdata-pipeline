@@ -13,7 +13,9 @@ TOPIC_NAME = 'spotify_playback_events'  # Topic cho luồng sự kiện nghe nh�
 # (portable, suy ra từ vị trí file này) thay vì đường dẫn tuyệt đối cứng.
 # Có thể override qua biến môi trường TRACKS_DATA_PATH.
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DATA_FILE_PATH = os.getenv("TRACKS_DATA_PATH", os.path.join(_REPO_ROOT, "data", "tracks.json"))
+DATA_FILE_PATH = os.getenv(
+    "TRACKS_DATA_PATH", os.path.join(_REPO_ROOT, "data", "tracks.json")
+)
 
 # Cấu hình giả lập
 LOCATIONS = ['VN', 'US', 'UK', 'KR', 'JP', 'DE']
