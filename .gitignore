@@ -11,6 +11,11 @@ env/
 
 .vscode/
 
+# Java / Maven build output (e.g. flink_jobs/target/)
+target/
+*.class
+dependency-reduced-pom.xml
+
 # OS
 .DS_Store
 Thumbs.db
