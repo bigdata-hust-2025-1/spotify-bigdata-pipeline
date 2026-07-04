@@ -63,6 +63,35 @@ def test_get_ingest_date_env_override_wins():
             os.environ["INGEST_DATE"] = saved
 
 
+def test_checkpoint_location_is_durable_and_namespaced():
+    path = config.checkpoint_location("stream_x")
+    assert path == config.CHECKPOINT_ROOT.rstrip("/") + "/stream_x"
+    assert "/tmp" not in path, "checkpoints must never live under /tmp"
+
+
+def test_checkpoint_location_rejects_empty_job_name():
+    for bad in ("", None):
+        try:
+            config.checkpoint_location(bad)  # type: ignore[arg-type]
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for job_name={bad!r}")
+
+
+def test_checkpoint_root_env_override_and_trailing_slash():
+    """A trailing slash on CHECKPOINT_ROOT must not produce a double slash."""
+    env = dict(os.environ, CHECKPOINT_ROOT="s3a://cp/", PYTHONPATH=_REPO_ROOT)
+    code = (
+        "import common.config as c; "
+        "p = c.checkpoint_location('j'); "
+        "assert p == 's3a://cp/j', p; print('OK')"
+    )
+    out = subprocess.run([sys.executable, "-c", code], env=env,
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert "OK" in out.stdout
+
+
 def test_topic_env_override_wins_at_import():
     """A constant set via env BEFORE import must win (fresh subprocess)."""
     env = dict(os.environ, TOPIC_PLAYBACK="override.topic.v9", PYTHONPATH=_REPO_ROOT)
