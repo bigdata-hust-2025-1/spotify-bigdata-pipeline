@@ -15,3 +15,13 @@ env/
 .DS_Store
 Thumbs.db
 
+# Secrets — never commit real credentials. Only *.env.example templates are
+# tracked; real .env files are ignored. See docs/SECRETS.md.
+.env
+*.env
+!.env.example
+!*.env.example
+
+# Spotipy OAuth token cache (contains a live access/refresh token).
+.cache
+
