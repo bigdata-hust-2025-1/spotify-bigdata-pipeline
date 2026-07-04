@@ -1,9 +1,21 @@
-from pyspark.sql import SparkSession
-from pathlib import Path
 import os
+import sys
+from pathlib import Path
+
+from pyspark.sql import SparkSession
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import DATA_DIR, require_env  # noqa: E402
 
 GOLD_BUCKET = "spotify-gold"
-LOCAL_BASE_DIR = r"D:\PROJECT\Github\spotify-bigdata-pipeline\minIO\data\data_gold"
+# Thư mục local để export gold; mặc định repo-relative, override bằng GOLD_EXPORT_DIR.
+LOCAL_BASE_DIR = os.getenv("GOLD_EXPORT_DIR", os.path.join(DATA_DIR, "data_gold"))
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
 
 
 def main():
@@ -11,9 +23,9 @@ def main():
     # Khởi tạo SparkSession với cấu hình MinIO
     spark = SparkSession.builder \
         .appName("ExportMinIOToLocal") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://minio.bigdata:9000") \
-        .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
-        .config("spark.hadoop.fs.s3a.secret.key", "miniopass123") \
+        .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT) \
+        .config("spark.hadoop.fs.s3a.access.key", ACCESS_KEY) \
+        .config("spark.hadoop.fs.s3a.secret.key", SECRET_KEY) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .getOrCreate()

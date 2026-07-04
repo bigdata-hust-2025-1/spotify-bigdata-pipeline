@@ -63,6 +63,36 @@ def test_get_ingest_date_env_override_wins():
             os.environ["INGEST_DATE"] = saved
 
 
+def test_require_env_returns_value_when_set():
+    os.environ["PR006_TEST_VAR"] = "secret-value"
+    try:
+        assert config.require_env("PR006_TEST_VAR") == "secret-value"
+    finally:
+        os.environ.pop("PR006_TEST_VAR", None)
+
+
+def test_require_env_raises_when_missing_or_empty():
+    for key, val in (("PR006_MISSING", None), ("PR006_EMPTY", "")):
+        if val is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = val
+        try:
+            config.require_env(key)
+        except RuntimeError as exc:
+            assert key in str(exc), f"message should name the missing var: {exc}"
+        else:
+            raise AssertionError(f"require_env should raise for {key}={val!r}")
+        finally:
+            os.environ.pop(key, None)
+
+
+def test_data_dir_is_absolute_repo_relative_default():
+    if not os.getenv("DATA_DIR"):
+        assert os.path.isabs(config.DATA_DIR)
+        assert os.path.basename(config.DATA_DIR) == "data"
+
+
 def test_topic_env_override_wins_at_import():
     """A constant set via env BEFORE import must win (fresh subprocess)."""
     env = dict(os.environ, TOPIC_PLAYBACK="override.topic.v9", PYTHONPATH=_REPO_ROOT)

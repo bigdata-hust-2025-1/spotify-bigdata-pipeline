@@ -86,5 +86,7 @@ Các job đọc cấu hình từ biến môi trường để không phụ thuộ
 | `INGEST_DATE` | `2025-12-21` | `spark_jobs/batch/bronze_to_silver_all.py`, `silver_to_gold_all.py` | Ngày partition dữ liệu cần xử lý. Airflow có thể truyền `{{ ds }}`. |
 | `TRACKS_DATA_PATH` | `<repo>/data/tracks.json` | `spark_jobs/stream/produce_to_kafka.py` | Đường dẫn file track cho producer (mặc định trỏ vào repo, portable). |
 | `TOPIC_PLAYBACK` | `spotify_playback_events` | Producer + các stream job (`common/config.py`) | Tên topic thống nhất cho luồng sự kiện nghe nhạc. |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | *(bắt buộc)* | Các job đọc/ghi MinIO | Bắt buộc — job dừng ngay (fail-fast) nếu thiếu, không dùng default không an toàn. |
+| `DATA_DIR` | `<repo>/data` | `minIO/*.py`, một số batch job | Thư mục dữ liệu local (thay cho đường dẫn `D:\...` cứng). |
 
 *(Nguồn cấu hình tập trung: `common/config.py` — xem `/docs/CONFIGURATION.md`. Chi tiết thay đổi theo từng PR: xem `/docs/CHANGELOG.md`.)*

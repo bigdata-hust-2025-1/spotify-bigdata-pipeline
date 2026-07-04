@@ -1,11 +1,18 @@
+import os
+import sys
+
 from pyspark.sql import SparkSession
 
-import os
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
 
 # Lấy cấu hình từ biến môi trường (K8s) hoặc giá trị mặc định nội bộ
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
+MINIO_ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = require_env("MINIO_SECRET_KEY")
 
 # Cấu hình Spark session tích hợp Iceberg và MinIO
 spark = SparkSession.builder \

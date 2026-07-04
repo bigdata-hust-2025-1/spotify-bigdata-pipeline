@@ -1,13 +1,21 @@
 import os
+import sys
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler, StandardScaler
 from pyspark.ml.clustering import KMeans
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
+
 # --- CẤU HÌNH ---
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
 
 # Ngày dữ liệu (Sửa lại cho đúng ngày bạn đã ingest)
 INGEST_DATE = "2025-12-21"  

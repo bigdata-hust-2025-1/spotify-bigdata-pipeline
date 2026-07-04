@@ -30,6 +30,26 @@ topics they consumed. Centralising the names removes that entire class of bug.
 | Buckets (medallion) | `BRONZE_BUCKET`, `SILVER_BUCKET`, `GOLD_BUCKET` |
 | Endpoints (non-secret) | `KAFKA_BOOTSTRAP_SERVERS`, `MINIO_ENDPOINT`, `ES_NODES`, `ES_PORT`, `CASSANDRA_HOST`, `CASSANDRA_PORT` |
 | Ingest date | `DEFAULT_INGEST_DATE`, `get_ingest_date()` |
+| Local paths | `DATA_DIR` |
+| Required secrets | `require_env(name)` |
+
+## Required secrets & fail-fast (`require_env`)
+
+Credentials are **never** defaulted in code. Jobs resolve them through
+`require_env(name)`, which raises `RuntimeError` if the variable is unset or
+empty — so a missing secret fails the job immediately with a clear message
+instead of silently falling back to a well-known default like `minioadmin`
+(findings G2/G3).
+
+```python
+from common.config import require_env
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")   # raises if unset
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
+```
+
+`DATA_DIR` (default `<repo>/data`, override with `DATA_DIR`) replaces the
+machine-specific absolute paths (e.g. `D:\...`) that were baked into the local
+export/upload scripts, so they run on any machine.
 
 ### Environment variables
 
@@ -68,10 +88,11 @@ where it is behaviour-preserving and in-scope for later PRs:
 
 | Surface | Adopted in |
 | :--- | :--- |
-| `TOPIC_PLAYBACK` → producer + 3 stream consumers | **PR-03 (this change)** |
-| Endpoint/bucket constants → batch Spark jobs | PR-06 |
+| `TOPIC_PLAYBACK` → producer + 3 stream consumers | PR-03 |
+| `require_env` (creds) + `DATA_DIR` → batch & minIO jobs | **PR-06 (this change)** |
+| Endpoint/bucket constants → batch Spark jobs | PR-06+ (endpoints light-touch) |
 | Crawl topics → crawler / Kafka→MinIO consumer | PR-11 |
-| `get_ingest_date()` → batch jobs | PR-06 / PR-18 |
+| `get_ingest_date()` → batch jobs | PR-18 |
 | `TOPIC_ANOMALY` → Flink anomaly job | PR-05 / PR-10 |
 
 Until a surface is adopted, its constant is simply the canonical definition;

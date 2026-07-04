@@ -1,7 +1,16 @@
 # spark_jobs/batch/ingest_bronze_spark.py
 import os
+import sys
 from datetime import date
+
 from pyspark.sql import SparkSession
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
+
 
 def main():
     # 1. Khởi tạo Spark với cấu hình S3
@@ -9,8 +18,8 @@ def main():
     spark = SparkSession.builder \
         .appName("IngestToBronze") \
         .config("spark.hadoop.fs.s3a.endpoint", os.getenv("MINIO_ENDPOINT", "http://host.docker.internal:9000")) \
-        .config("spark.hadoop.fs.s3a.access.key", os.getenv("MINIO_ACCESS_KEY", "minioadmin")) \
-        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("MINIO_SECRET_KEY", "miniopass123")) \
+        .config("spark.hadoop.fs.s3a.access.key", require_env("MINIO_ACCESS_KEY")) \
+        .config("spark.hadoop.fs.s3a.secret.key", require_env("MINIO_SECRET_KEY")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
@@ -19,7 +28,7 @@ def main():
     print("Spark Session created for Ingestion!")
 
     # Cấu hình đường dẫn (Bên trong Docker)
-    # Chúng ta sẽ mount thư mục D:\Big_Data_For_School\data vào /data trong container
+    # Chúng ta sẽ mount thư mục dữ liệu local vào /data trong container
     LOCAL_DATA_DIR_IN_DOCKER = "/data"
     BRONZE_BUCKET = "s3a://spotify-bronze"
     ingest_date = date.today().isoformat()

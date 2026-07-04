@@ -81,3 +81,33 @@ def get_ingest_date() -> str:
     :data:`DEFAULT_INGEST_DATE` when it is unset.
     """
     return os.getenv("INGEST_DATE", DEFAULT_INGEST_DATE)
+
+
+# ---------------------------------------------------------------------------
+# Local filesystem paths
+# ---------------------------------------------------------------------------
+# Repo root (…/spotify-bigdata-pipeline), derived from this file's location.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Base directory for local data I/O (ingest sources, local exports). Replaces
+# machine-specific absolute filesystem paths; override with ``DATA_DIR``.
+DATA_DIR = os.getenv("DATA_DIR", os.path.join(_REPO_ROOT, "data"))
+
+
+# ---------------------------------------------------------------------------
+# Required secrets (fail-fast)
+# ---------------------------------------------------------------------------
+def require_env(name: str) -> str:
+    """Return a required environment variable, or fail fast.
+
+    Raises :class:`RuntimeError` when ``name`` is unset or empty so a job never
+    silently falls back to a well-known insecure default credential. Runtime
+    credentials are supplied by the environment / Kubernetes Secrets.
+    """
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(
+            f"Required environment variable '{name}' is not set. Provide it via "
+            "your environment or a Kubernetes Secret (see docs/CONFIGURATION.md)."
+        )
+    return value

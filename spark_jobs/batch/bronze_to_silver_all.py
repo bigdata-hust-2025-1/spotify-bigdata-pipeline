@@ -4,10 +4,16 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, concat_ws, expr, lit, udf
 from pyspark.sql.types import StructType, ArrayType, StringType
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
+
 # Lấy cấu hình từ biến môi trường
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://host.docker.internal:9000")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
 
 BRONZE_BUCKET = "s3a://spotify-bronze"
 SILVER_BUCKET = "s3a://spotify-silver"

@@ -1,9 +1,17 @@
 import os
+import sys
+
 from pyspark.sql import SparkSession
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
+
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
 ES_NODES = "elasticsearch.bigdata"
 ES_PORT = "9200"
 INGEST_DATE = "2025-12-21" # Cập nhật ngày đúng

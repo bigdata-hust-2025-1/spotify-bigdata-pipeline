@@ -3,6 +3,59 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-06 — Fail-fast credentials + kill hardcoded paths
+
+**Type:** fix (security) · **Branch:** `pr-006-fail-fast-config` (stacks on PR-03)
+
+### Context
+Most Spark/minIO jobs baked in insecure MinIO defaults
+(`os.getenv("MINIO_SECRET_KEY", "miniopass123")`, or literal `minioadmin`), so a
+missing secret silently became a well-known credential; several scripts also
+hardcoded machine-specific `D:\...` absolute paths (findings G2/G3).
+
+### Changed
+- **`common/config.py`** — add `require_env(name)` (raises `RuntimeError` on
+  unset/empty, no insecure fallback) and `DATA_DIR` (repo-relative default,
+  override with `DATA_DIR`).
+- **Credentials → `require_env`** in `minIO/minio_client.py` and 8
+  `spark_jobs/batch/*.py` (`advanced_analytics`, `bronze_to_silver_all`,
+  `bronze_to_silver_iceberg`, `get_data_gold_all`, `get_data_silver_all`,
+  `gold_to_es`, `silver_to_gold_all`, `upload_data`). No `minioadmin` /
+  `miniopass123` defaults remain.
+- **Hardcoded paths → portable** — `minIO/get_data_gold.py`,
+  `minIO/upload_minio.py`, `spark_jobs/batch/get_data_gold_all.py` now derive
+  local dirs from `DATA_DIR` / `GOLD_EXPORT_DIR`; stray `D:\...` mentions in
+  comments/print strings removed.
+- **`tests/test_config.py`** — `require_env` (set / unset / empty) and `DATA_DIR`.
+- **Docs** — `docs/CONFIGURATION.md` (require_env + DATA_DIR); README env vars.
+
+### Design decisions
+1. **Fail fast, no insecure default.** `require_env` turns a missing secret into
+   an immediate, clear error instead of a silent `minioadmin` fallback.
+2. **`DATA_DIR` over per-file absolute paths.** One repo-relative, env-overridable
+   base makes the local scripts portable; the paths AC was otherwise unmet
+   because `D:\...` literals remained (e.g. `get_data_gold_all.py`).
+3. **Endpoints left as-is.** The strict scope here is *credentials* and *paths*;
+   centralising non-secret endpoints is the roadmap's separate light-touch work.
+4. **`sys.path` bootstrap per job** (repo root via `__file__`) so `common`
+   imports under `spark-submit`, mirroring PR-03.
+
+### Verification
+- `git grep` → no `minioadmin` / `miniopass123` and no `D:\` literals remain.
+- `python -m py_compile` on every edited job; `ruff (E,F)` clean on authored lines.
+- `python tests/test_config.py` passes (require_env raises on unset/empty).
+
+### New environment variables
+| Variable | Default | Notes |
+| :--- | :--- | :--- |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | *(required)* | Now mandatory — jobs fail fast if unset. |
+| `DATA_DIR` | `<repo>/data` | Local data I/O base (replaces `D:\...`). |
+| `GOLD_EXPORT_DIR` | `<DATA_DIR>/data_gold` | Local gold-export target. |
+
+### Rollback
+Revert restores the prior defaults; no state change. After revert, jobs again
+fall back to insecure defaults, so prefer setting the env vars over reverting.
+
 ## PR-03 — Central config module + unified Kafka topic taxonomy
 
 **Type:** refactor + fix · **Branch:** `pr-003-central-config` (stacks on PR-01)
