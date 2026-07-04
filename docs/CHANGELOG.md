@@ -3,6 +3,64 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-04 — Reconnect streaming paths + durable checkpoints + Cassandra schema fix
+
+**Type:** fix · **Branch:** `pr-004-streaming-reconnect` (stacks on PR-03)
+
+### Context
+The streaming sinks were unreliable (findings A4, D2, F1): `stream_to_cassandra`
+wrote **raw Kafka bytes** into the typed `spotify_ks.user_plays` table with no
+checkpoint and a mismatched output mode; the Elasticsearch stream checkpointed to
+`/tmp` (lost on restart) and used the deprecated `realtime_events/doc` mapping
+type. Without a durable checkpoint, neither query could resume from committed
+offsets.
+
+### Changed
+- **`common/config.py`** — add `CHECKPOINT_ROOT` (durable object-store default,
+  never `/tmp`) and a pure `checkpoint_location(job_name)` helper.
+- **`spark_jobs/stream/event_schema.py`** (new) — shared `PLAYBACK_EVENT_SCHEMA`
+  and `USER_PLAYS_COLUMNS` so both consumers parse one canonical schema.
+- **`spark_jobs/stream/stream_to_cassandra.py`** — `from_json` into the typed
+  `user_plays` columns; derive `event_time`; event-time watermark +
+  `dropDuplicatesWithinWatermark(["event_id"])`; durable checkpoint; output mode
+  `append`; restructured into a testable `transform()` + `main()`.
+- **`spark_jobs/stream/stream_processing.py`** — shared schema; watermark + dedup;
+  typeless `es.resource = "realtime_events"`; `es.mapping.id = event_id` for
+  idempotent upserts; durable checkpoint.
+- **`cassandra/user_plays.cql`** (new) — the concrete table contract the Spark
+  writer targets (kept in sync with `USER_PLAYS_COLUMNS` by tests).
+- **`tests/test_event_schema.py`** (new) + `tests/test_config.py` — schema/DDL
+  consistency and `checkpoint_location` behaviour.
+- **`docs/streaming.md`** (new) — offset-reset policy, delivery semantics, RPO/RTO.
+
+### Design decisions
+1. **Durable, per-query checkpoints via a helper.** Centralising the root and
+   deriving `<root>/<job>` prevents the `/tmp` mistake and keeps query state
+   isolated. Changing a `job_name` intentionally orphans the old checkpoint.
+2. **`dropDuplicatesWithinWatermark(["event_id"])`** (Spark 3.5) bounds dedup
+   state by the watermark and keys on `event_id` alone — the correct
+   state-bounded dedup, versus an unbounded `dropDuplicates`.
+3. **Idempotent sinks.** ES keys documents by `event_id`; Cassandra's primary
+   key `((user_id), event_time, event_id)` upserts replays in place. Combined
+   with at-least-once Kafka delivery this yields effectively-once results.
+4. **Shipped the CQL DDL.** The `user_plays` schema existed nowhere in the repo,
+   so "columns match" was unverifiable; the DDL makes the contract concrete and
+   test-enforced. Scoped strictly to the streaming write; broader modelling
+   (star schema/SCD2) remains PR-09.
+
+### Verification
+- `py_compile` + `ruff (E,F)` clean on all changed files.
+- `python tests/test_config.py` and `tests/test_event_schema.py` pass (no JVM).
+- `git grep` confirms both jobs subscribe `TOPIC_PLAYBACK`, no `/tmp` checkpoint
+  remains, and no `.../doc` ES type remains.
+- Full offset-continuity on kill/restart requires a live Kafka+Cassandra+ES
+  cluster (documented runbook in `docs/streaming.md`).
+
+### Rollback
+Revert restores the prior files. **Also delete the new checkpoint directories**
+(`$CHECKPOINT_ROOT/stream_processing_es`, `.../stream_to_cassandra`) so the old
+code does not resume against a checkpoint written by the new schema.
+
 ## PR-03 — Central config module + unified Kafka topic taxonomy
 
 **Type:** refactor + fix · **Branch:** `pr-003-central-config` (stacks on PR-01)
