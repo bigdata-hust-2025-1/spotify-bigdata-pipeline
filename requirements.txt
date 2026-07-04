@@ -6,3 +6,9 @@ streamlit
 plotly
 watchdog
 pyspark==3.5.3
+
+# Iceberg Lakehouse runtime (Silver/Gold tables). This is a Spark JVM package,
+# not a pip dependency — Spark pulls it at submit time via `spark.jars.packages`
+# (see ICEBERG_SPARK_RUNTIME in common/spark.py). Pinned here for reproducibility
+# and MUST match the Spark 3.5 line above (the `_3.5_` classifier):
+#   org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2

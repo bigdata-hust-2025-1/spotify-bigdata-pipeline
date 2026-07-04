@@ -3,6 +3,33 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-07 — Iceberg-backed Silver (catalog + MERGE upsert)
+
+**Type:** feat (lakehouse) · **Branch:** `pr-007-iceberg-silver` (off `main`)
+
+### Context
+The "Lakehouse" claim was unbacked: live Silver was `write.mode("overwrite")`
+Parquet, and the only Iceberg script (`bronze_to_silver_iceberg.py`) was
+orphaned and pinned the **Spark 3.3** Iceberg runtime against a `pyspark==3.5`
+project — a guaranteed jar mismatch (findings C1/C2/C3).
+
+### Changed
+- **`common/spark.py`** (new) — central `build_spark(app_name, iceberg=…)` with
+  the MinIO S3A config and the **Iceberg 3.5** runtime + a Hadoop `lakehouse`
+  catalog whose warehouse lives on MinIO. Plus pure, JVM-free helpers
+  `silver_table()` and `build_merge_sql()`.
+- **`spark_jobs/batch/bronze_to_silver_all.py`** — feature-flagged
+  (`SILVER_FORMAT=iceberg|parquet`, **default `parquet`** so `main` is
+  behaviour-preserving until the cutover). The Iceberg path creates each Silver
+  table (empty CTAS to inherit schema + hidden `days(ingest_ts)` partitioning)
+  then `MERGE INTO` upserts on the business key → idempotent re-runs.
+- **`requirements.txt`** — documents the Iceberg Spark runtime coordinate
+  aligned to Spark 3.5 (`iceberg-spark-runtime-3.5_2.12`).
+- **Deleted** `spark_jobs/batch/bronze_to_silver_iceberg.py` (orphan, Spark 3.3).
+- **`tests/test_spark.py`** (new, 8) — table naming, MERGE-SQL generation, empty-
+  key guard, runtime-classifier check, per-dataset business-key coverage.
+- **Docs** — `docs/lakehouse.md` (catalog, MERGE, partitioning, cutover, rollback).
+
 ## PR-06 — Fail-fast credentials + kill hardcoded paths
 
 **Type:** fix (security) · **Branch:** `pr-006-fail-fast-config` (stacks on PR-03)
