@@ -1,5 +1,13 @@
 import os
+import sys
 from pyspark.sql import SparkSession
+
+# Cho phép import package `common` ở gốc repo khi chạy qua spark-submit.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import TOPIC_PLAYBACK  # noqa: E402
 
 CASSANDRA_HOST = os.getenv("CASSANDRA_HOST", "cassandra.bigdata")
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka.bigdata:9092")
@@ -14,7 +22,7 @@ spark = SparkSession.builder \
 streaming_df = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", KAFKA_BROKER) \
-    .option("subscribe", "spotify-gold-events") \
+    .option("subscribe", TOPIC_PLAYBACK) \
     .load()
 
 def write_to_cassandra(df, epoch_id):
