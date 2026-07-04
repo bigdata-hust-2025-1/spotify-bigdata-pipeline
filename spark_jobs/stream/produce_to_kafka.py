@@ -2,17 +2,24 @@ import json
 import time
 import random
 import os
+import sys
 import uuid
 from kafka import KafkaProducer
 
+# Cho phép import package `common` ở gốc repo khi chạy trực tiếp / qua spark-submit.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import TOPIC_PLAYBACK  # noqa: E402
+
 # Cấu hình Kafka
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
-TOPIC_NAME = 'spotify_playback_events'  # Topic cho luồng sự kiện nghe nhạc
+TOPIC_NAME = TOPIC_PLAYBACK  # Tên topic thống nhất từ common.config (finding A2)
 
 # Đường dẫn file dữ liệu track. Mặc định trỏ tới data/tracks.json trong repo
 # (portable, suy ra từ vị trí file này) thay vì đường dẫn tuyệt đối cứng.
 # Có thể override qua biến môi trường TRACKS_DATA_PATH.
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_FILE_PATH = os.getenv(
     "TRACKS_DATA_PATH", os.path.join(_REPO_ROOT, "data", "tracks.json")
 )

@@ -1,10 +1,18 @@
+import os
 import sys
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.types import *
 
+# Cho phép import package `common` ở gốc repo khi chạy qua spark-submit.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import TOPIC_PLAYBACK  # noqa: E402
+
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
-TOPIC = "spotify_playback_events"
+TOPIC = TOPIC_PLAYBACK  # Tên topic thống nhất từ common.config (finding A2)
 MONGO_URI = "mongodb://mongodb.bigdata:27017/spotify_db.playback_events"
 
 def main():
