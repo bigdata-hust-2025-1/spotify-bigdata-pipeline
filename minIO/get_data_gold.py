@@ -1,10 +1,17 @@
-from minio import Minio
-from minio_client import get_minio_client # CONFIG
 import os
+import sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from minio_client import get_minio_client  # noqa: E402  (CONFIG)
+from common.config import DATA_DIR  # noqa: E402
 
 GOLD_BUCKET = "spotify-gold"
 
-LOCAL_BASE_DIR = r"D:\PROJECT\Github\spotify-bigdata-pipeline\minIO\data\data_gold"  
+# Thư mục local để export; mặc định repo-relative, override bằng GOLD_EXPORT_DIR.
+LOCAL_BASE_DIR = os.getenv("GOLD_EXPORT_DIR", os.path.join(DATA_DIR, "data_gold"))
 
 
 def main():

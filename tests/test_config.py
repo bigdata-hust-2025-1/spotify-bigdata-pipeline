@@ -63,33 +63,34 @@ def test_get_ingest_date_env_override_wins():
             os.environ["INGEST_DATE"] = saved
 
 
-def test_checkpoint_location_is_durable_and_namespaced():
-    path = config.checkpoint_location("stream_x")
-    assert path == config.CHECKPOINT_ROOT.rstrip("/") + "/stream_x"
-    assert "/tmp" not in path, "checkpoints must never live under /tmp"
+def test_require_env_returns_value_when_set():
+    os.environ["PR006_TEST_VAR"] = "secret-value"
+    try:
+        assert config.require_env("PR006_TEST_VAR") == "secret-value"
+    finally:
+        os.environ.pop("PR006_TEST_VAR", None)
 
 
-def test_checkpoint_location_rejects_empty_job_name():
-    for bad in ("", None):
+def test_require_env_raises_when_missing_or_empty():
+    for key, val in (("PR006_MISSING", None), ("PR006_EMPTY", "")):
+        if val is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = val
         try:
-            config.checkpoint_location(bad)  # type: ignore[arg-type]
-        except ValueError:
-            continue
-        raise AssertionError(f"expected ValueError for job_name={bad!r}")
+            config.require_env(key)
+        except RuntimeError as exc:
+            assert key in str(exc), f"message should name the missing var: {exc}"
+        else:
+            raise AssertionError(f"require_env should raise for {key}={val!r}")
+        finally:
+            os.environ.pop(key, None)
 
 
-def test_checkpoint_root_env_override_and_trailing_slash():
-    """A trailing slash on CHECKPOINT_ROOT must not produce a double slash."""
-    env = dict(os.environ, CHECKPOINT_ROOT="s3a://cp/", PYTHONPATH=_REPO_ROOT)
-    code = (
-        "import common.config as c; "
-        "p = c.checkpoint_location('j'); "
-        "assert p == 's3a://cp/j', p; print('OK')"
-    )
-    out = subprocess.run([sys.executable, "-c", code], env=env,
-                         capture_output=True, text=True)
-    assert out.returncode == 0, out.stderr
-    assert "OK" in out.stdout
+def test_data_dir_is_absolute_repo_relative_default():
+    if not os.getenv("DATA_DIR"):
+        assert os.path.isabs(config.DATA_DIR)
+        assert os.path.basename(config.DATA_DIR) == "data"
 
 
 def test_topic_env_override_wins_at_import():

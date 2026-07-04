@@ -1,11 +1,19 @@
 # spark_jobs/batch/export_tracks.py
 import os
+import sys
+
 from pyspark.sql import SparkSession
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from common.config import require_env  # noqa: E402
 
 # Lấy cấu hình từ biến môi trường (Docker truyền vào)
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "miniopass123")
+ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
+SECRET_KEY = require_env("MINIO_SECRET_KEY")
 
 # --- HÃY KIỂM TRA NGÀY TRÊN MINIO CỦA BẠN ---
 INGEST_DATE = "2025-12-21" 
@@ -32,7 +40,7 @@ def main():
         df = spark.read.parquet(src_path)
         print(f"    Loaded {df.count()} rows, {len(df.columns)} columns")
 
-        # Đường dẫn ghi ra (Mount volume /data -> D:\Big_Data_For_School\data)
+        # Đường dẫn ghi ra (Mount volume /data từ thư mục dữ liệu local)
         output_dir = "/data/tracks_csv_output"
 
         print(f"--> Writing CSV to: {output_dir}")
@@ -45,7 +53,7 @@ def main():
               .csv(output_dir)
         )
 
-        print("✅ SUCCESS! Check your Windows folder: D:\\Big_Data_For_School\\data\\tracks_csv_output")
+        print("✅ SUCCESS! Check your mounted output folder: /data/tracks_csv_output")
         
     except Exception as e:
         print(f"❌ Error: {str(e)}")

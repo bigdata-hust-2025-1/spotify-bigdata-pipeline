@@ -1,12 +1,19 @@
 # upload_to_bronze.py
 import os
+import sys
 from datetime import date
-from minio_client import get_minio_client
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from minio_client import get_minio_client  # noqa: E402
+from common.config import DATA_DIR  # noqa: E402
 
 BRONZE_BUCKET = "spotify-bronze"
 
-# TODO: chỉnh thư mục chứa các file json 
-LOCAL_DATA_DIR = r"D:\semester2025.1\BigData\project\spotify-bigdata-pipeline\data"   # ví dụ, thay bằng đường dẫn thật
+# Thư mục chứa các file json nguồn; mặc định <repo>/data, override bằng DATA_DIR.
+LOCAL_DATA_DIR = DATA_DIR
 
 def ensure_bucket(client, bucket_name: str):
     if not client.bucket_exists(bucket_name):
