@@ -104,7 +104,9 @@ def build_merge_sql(target_table: str, source_view: str, key_columns) -> str:
     )
 
 
-def build_spark(app_name: str, *, iceberg: bool = True, extra_packages=None):
+def build_spark(
+    app_name: str, *, iceberg: bool = True, extra_packages=None, extra_configs=None
+):
     """Create a configured :class:`SparkSession`.
 
     Always wires the MinIO S3A filesystem (endpoint from
@@ -119,7 +121,9 @@ def build_spark(app_name: str, *, iceberg: bool = True, extra_packages=None):
     ``spark.jars.packages`` alongside the Iceberg runtime — e.g. the
     Elasticsearch-Spark connector needed by ``gold_to_es`` — so a job can
     declare every JVM dependency it needs in one place rather than relying on an
-    external ``--packages`` flag.
+    external ``--packages`` flag. ``extra_configs`` (a mapping) sets any further
+    Spark configs — e.g. the ``spark.cassandra.connection.*`` host/port needed by
+    ``build_facts`` when reading the playback events from Cassandra.
 
     ``pyspark`` is imported lazily here so importing this module (and its pure
     helpers) needs no Spark/JVM.
@@ -146,6 +150,9 @@ def build_spark(app_name: str, *, iceberg: bool = True, extra_packages=None):
         packages.extend(extra_packages)
     if packages:
         builder = builder.config("spark.jars.packages", ",".join(packages))
+
+    for key, value in (extra_configs or {}).items():
+        builder = builder.config(key, value)
 
     if iceberg:
         builder = (

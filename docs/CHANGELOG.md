@@ -3,6 +3,73 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-09 — Dimensional model: star schema + SCD2 dimensions
+
+**Type:** feat (modeling) · **Branch:** `pr-009-star-schema` (stacks on PR-08)
+
+### Context
+Silver mirrors source JSON (`artist_ids` as a delimited string) and the legacy
+Gold `*_stats` tables flatten-then-reaggregate with no conformed dimensions,
+surrogate keys, or history (finding B2). PR-09 adds a proper star schema in a new
+`gold_star` Iceberg namespace, **additive** to the untouched legacy `*_stats`.
+
+### Changed
+- **`common/modeling.py`** (new) — pure, JVM-free helpers: `star_table()`,
+  `attribute_hash_expr()` (null-safe SCD2 change detection),
+  `surrogate_key_expr()` (deterministic per-version key), the three SCD2
+  statements (`scd2_close_sql` / `scd2_insert_sql`), and
+  `unresolved_fk_count_sql()` (referential-integrity check).
+- **`spark_jobs/batch/build_dimensions.py`** (new) — SCD2 `dim_artist` /
+  `dim_album` / `dim_track` from Silver via the idempotent three-step (stage →
+  close changed → insert new/changed). `dim_track` splits `artist_ids` into
+  `array<string>` so the model has no delimited-string ids.
+- **`spark_jobs/batch/build_facts.py`** (new) — `fact_playback` at event grain
+  (`event_id`) from Cassandra `spotify_ks.user_plays`, left-joined to the current
+  dimension versions for surrogate keys, `MERGE`-upserted into
+  `gold_star.fact_playback` (partitioned by `days(event_time)`).
+- **`common/spark.py`** — added an `extra_configs` hook to `build_spark` (for the
+  `spark.cassandra.connection.*` host/port). Backward-compatible.
+- **`tests/test_modeling.py`** (new, 11) — naming, hash/key exprs, SCD2 SQL
+  (close/insert/composite key), FK-check + guards.
+- **Docs** — `docs/DATA_MODEL.md` (ERD, grain, surrogate keys, SCD2 flow,
+  verification).
+
+### Design decisions
+1. **Additive star model in `gold_star`, Silver untouched.** The roadmap's
+   Silver `artist_ids` string→array change would break shared Silver consumers
+   (`minIO/silver_to_gold.py`, PR-08 Gold) and violate "main stays green", so the
+   array split lives in `dim_track` — the AC "no delimited-string id columns
+   remain **in the model**" holds without a Silver schema change. Silver cutover
+   deferred.
+2. **Deterministic hash surrogate keys.** `sha2(business_key || valid_from)` is
+   reproducible (idempotent load) and unique per version — unlike
+   `monotonically_increasing_id`, which would churn keys every run.
+3. **SCD2 via a 3-step MERGE/anti-join, not one statement.** A single MERGE
+   cannot both close the old version and insert the new one for the same key;
+   close-then-anti-join-insert is the standard, idempotent pattern.
+4. **Fact from Cassandra (`FACT_SOURCE`).** Raw events are only retained in the
+   serving store (PR-04); reading it is pragmatic and the source is configurable
+   so a future lake-landed `events` dataset is a config swap.
+5. **Pure SQL builders.** All SCD2/key/hash logic is side-effect-free and
+   unit-tested with no JVM (mirrors `build_merge_sql`).
+
+### Verification
+- `python -m py_compile` on all new/edited files; `ruff (E,F)` clean.
+- `python tests/test_modeling.py` (11) + existing suites pass with no Spark/JVM.
+- Live SCD2 history / fact FK-resolution need a Spark 3.5 + MinIO + Cassandra
+  environment (documented in `docs/DATA_MODEL.md`, not runnable here).
+
+### New environment variables
+| Variable | Default | Notes |
+| :--- | :--- | :--- |
+| `GOLD_STAR_NAMESPACE` | `gold_star` | Iceberg namespace for the star model. |
+| `FACT_SOURCE` | `cassandra` | Playback-event source for `fact_playback`. |
+| `CASSANDRA_SPARK_CONNECTOR` | `com.datastax.spark:spark-cassandra-connector_2.12:3.5.0` | Batch Cassandra read. |
+
+### Rollback
+New namespace/tables are additive; `git revert` removes the builders and helpers,
+legacy `*_stats` and Silver are untouched. Drop `gold_star.*` to reclaim storage.
+
 ## PR-08 — Iceberg-backed Gold + maintenance (compaction, snapshot expiry)
 
 **Type:** feat (lakehouse) · **Branch:** `pr-008-iceberg-gold` (stacks on PR-07)
