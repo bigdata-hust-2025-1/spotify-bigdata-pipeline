@@ -15,7 +15,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from common import spark as spark_mod  # noqa: E402
-from common.spark import build_merge_sql, silver_table  # noqa: E402
+from common.spark import build_merge_sql, gold_table, silver_table  # noqa: E402
 from spark_jobs.batch.bronze_to_silver_all import BUSINESS_KEYS  # noqa: E402
 
 
@@ -29,6 +29,25 @@ def test_silver_table_rejects_empty():
     except ValueError:
         return
     raise AssertionError("silver_table('') should raise ValueError")
+
+
+def test_gold_table_default_identifier():
+    assert gold_table("artists_stats") == "lakehouse.gold.artists_stats"
+
+
+def test_gold_table_rejects_empty():
+    try:
+        gold_table("")
+    except ValueError:
+        return
+    raise AssertionError("gold_table('') should raise ValueError")
+
+
+def test_silver_and_gold_share_catalog_but_differ_by_namespace():
+    s = silver_table("x").split(".")
+    g = gold_table("x").split(".")
+    assert s[0] == g[0]          # same catalog
+    assert s[1] != g[1]          # different namespace (silver vs gold)
 
 
 def test_silver_table_honours_env_overrides():

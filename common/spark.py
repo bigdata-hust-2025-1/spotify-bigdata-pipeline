@@ -47,8 +47,15 @@ LAKEHOUSE_WAREHOUSE = os.getenv(
     "LAKEHOUSE_WAREHOUSE", "s3a://spotify-lakehouse/warehouse"
 )
 
-# Iceberg namespace for the Silver medallion layer.
+# Iceberg namespaces for the medallion layers.
 SILVER_NAMESPACE = os.getenv("SILVER_NAMESPACE", "silver")
+GOLD_NAMESPACE = os.getenv("GOLD_NAMESPACE", "gold")
+
+
+def _qualified_table(namespace: str, dataset: str) -> str:
+    if not dataset:
+        raise ValueError("dataset must be a non-empty table name")
+    return f"{LAKEHOUSE_CATALOG}.{namespace}.{dataset}"
 
 
 def silver_table(dataset: str) -> str:
@@ -57,9 +64,16 @@ def silver_table(dataset: str) -> str:
     e.g. ``silver_table("tracks") -> "lakehouse.silver.tracks"``. ``dataset``
     must be a non-empty simple name (it becomes part of a SQL identifier).
     """
-    if not dataset:
-        raise ValueError("dataset must be a non-empty table name")
-    return f"{LAKEHOUSE_CATALOG}.{SILVER_NAMESPACE}.{dataset}"
+    return _qualified_table(SILVER_NAMESPACE, dataset)
+
+
+def gold_table(dataset: str) -> str:
+    """Return the fully-qualified Iceberg table identifier for a Gold dataset.
+
+    e.g. ``gold_table("artists_stats") -> "lakehouse.gold.artists_stats"``.
+    Mirrors :func:`silver_table` so the medallion layers share one naming rule.
+    """
+    return _qualified_table(GOLD_NAMESPACE, dataset)
 
 
 def build_merge_sql(target_table: str, source_view: str, key_columns) -> str:
@@ -90,7 +104,7 @@ def build_merge_sql(target_table: str, source_view: str, key_columns) -> str:
     )
 
 
-def build_spark(app_name: str, *, iceberg: bool = True):
+def build_spark(app_name: str, *, iceberg: bool = True, extra_packages=None):
     """Create a configured :class:`SparkSession`.
 
     Always wires the MinIO S3A filesystem (endpoint from
@@ -100,6 +114,12 @@ def build_spark(app_name: str, *, iceberg: bool = True):
     registers the Iceberg 3.5 runtime, the SQL extensions, and the
     :data:`LAKEHOUSE_CATALOG` Hadoop catalog pointed at
     :data:`LAKEHOUSE_WAREHOUSE`.
+
+    ``extra_packages`` (an iterable of Maven coordinates) is merged into
+    ``spark.jars.packages`` alongside the Iceberg runtime — e.g. the
+    Elasticsearch-Spark connector needed by ``gold_to_es`` — so a job can
+    declare every JVM dependency it needs in one place rather than relying on an
+    external ``--packages`` flag.
 
     ``pyspark`` is imported lazily here so importing this module (and its pure
     helpers) needs no Spark/JVM.
@@ -119,10 +139,17 @@ def build_spark(app_name: str, *, iceberg: bool = True):
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
     )
 
+    packages = []
+    if iceberg:
+        packages.append(ICEBERG_SPARK_RUNTIME)
+    if extra_packages:
+        packages.extend(extra_packages)
+    if packages:
+        builder = builder.config("spark.jars.packages", ",".join(packages))
+
     if iceberg:
         builder = (
-            builder.config("spark.jars.packages", ICEBERG_SPARK_RUNTIME)
-            .config(
+            builder.config(
                 "spark.sql.extensions",
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             )
