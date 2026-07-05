@@ -1,113 +1,151 @@
 import os
 import sys
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import *
-from pyspark.sql.window import Window # [ADVANCED]
+
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window  # [ADVANCED] window function
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from common.config import require_env  # noqa: E402
+from common.config import GOLD_BUCKET, SILVER_BUCKET, get_ingest_date  # noqa: E402
+from common.spark import build_spark, gold_table, silver_table  # noqa: E402
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio.bigdata:9000")
-ACCESS_KEY = require_env("MINIO_ACCESS_KEY")
-SECRET_KEY = require_env("MINIO_SECRET_KEY")
+# s3a paths for the medallion buckets (bucket names come from common.config).
+SILVER_PATH = f"s3a://{SILVER_BUCKET}"
+GOLD_PATH = f"s3a://{GOLD_BUCKET}"
 
-# --- NGÀY DỮ LIỆU ---
-# Mặc định 2025-12-21 để đồng bộ với các job batch khác; override qua biến
-# môi trường INGEST_DATE (vd: Airflow truyền {{ ds }}).
-INGEST_DATE = os.getenv("INGEST_DATE", "2025-12-21")
+# Ngày ingest (override qua INGEST_DATE, vd Airflow {{ ds }}).
+INGEST_DATE = get_ingest_date()
 
-SILVER = "s3a://spotify-silver"
-GOLD = "s3a://spotify-gold"
+# Output format for the Gold layer. Default ``parquet`` preserves the legacy
+# overwrite behaviour so `main` is behaviour-preserving until the explicit
+# cutover; set ``GOLD_FORMAT=iceberg`` to read Silver Iceberg and write the Gold
+# Iceberg Lakehouse tables (end-to-end ACID + snapshots + time travel).
+GOLD_FORMAT = os.getenv("GOLD_FORMAT", "parquet").lower()
 
-spark = (
-    SparkSession.builder.appName("SilverToGold_Advanced")
-        .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT)
-        .config("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
-        .config("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
-        .config("spark.hadoop.fs.s3a.path.style.access", "true")
-        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-        .getOrCreate()
-)
 
-def build_gold_artists_stats():
-    print(f"\n=== GOLD: artists_stats ===")
+def get_spark_session():
+    # Iceberg runtime + Lakehouse catalog are only needed for the Iceberg path.
+    return build_spark(
+        "Spotify_Silver_To_Gold_Advanced",
+        iceberg=(GOLD_FORMAT == "iceberg"),
+    )
+
+
+def read_silver(spark, dataset):
+    """Read a Silver dataset.
+
+    Iceberg path reads the catalog table (the current, MERGE-upserted state of
+    the whole dataset); the legacy path reads the date-partitioned Parquet
+    directory for ``INGEST_DATE``.
+    """
+    if GOLD_FORMAT == "iceberg":
+        return spark.table(silver_table(dataset))
+    return spark.read.parquet(f"{SILVER_PATH}/{dataset}/ingest_date={INGEST_DATE}")
+
+
+def write_gold(df, dataset):
+    """Write a Gold dataset as Iceberg (ACID, snapshot per run) or legacy Parquet.
+
+    The Iceberg write uses ``createOrReplace`` — Gold stats are a full recompute
+    of an aggregate, so replacing the table contents transactionally keeps
+    re-runs idempotent (stable counts, one new snapshot, prior snapshots retained
+    for time travel).
+    """
+    if GOLD_FORMAT == "iceberg":
+        table = gold_table(dataset)
+        df.writeTo(table).using("iceberg").createOrReplace()
+        print(f"    [OK] {dataset} written as Iceberg {table}")
+    else:
+        output_path = f"{GOLD_PATH}/{dataset}/ingest_date={INGEST_DATE}"
+        df.write.mode("overwrite").parquet(output_path)
+        print(f"    [OK] {dataset} written as Parquet {output_path}")
+
+
+def build_gold_artists_stats(spark):
+    print("\n=== GOLD: artists_stats ===")
     try:
-        df_tracks = spark.read.parquet(f"{SILVER}/tracks/ingest_date={INGEST_DATE}")
-        df_artists = spark.read.parquet(f"{SILVER}/artists/ingest_date={INGEST_DATE}")
+        df_tracks = read_silver(spark, "tracks")
+        df_artists = read_silver(spark, "artists")
 
         # --- [ADVANCED] Caching Strategy ---
-        # Vì df_tracks được dùng nhiều lần, cache vào RAM để tối ưu
-        df_tracks.cache() 
+        # df_tracks is reused below, so cache it to avoid re-reading Silver.
+        df_tracks.cache()
         print(f"Cached Tracks count: {df_tracks.count()}")
         # -----------------------------------
 
-        df_tracks_exploded = df_tracks.withColumn("artist_id", explode(split(col("artist_ids"), ",")))
+        df_tracks_exploded = df_tracks.withColumn(
+            "artist_id", F.explode(F.split(F.col("artist_ids"), ","))
+        )
 
-        df_stats = (
-            df_tracks_exploded.groupBy("artist_id")
-                .agg(
-                    count("track_id").alias("track_count"),
-                    avg("popularity").alias("avg_track_popularity"),
-                    max("popularity").alias("max_track_popularity")
-                )
+        df_stats = df_tracks_exploded.groupBy("artist_id").agg(
+            F.count("track_id").alias("track_count"),
+            F.avg("popularity").alias("avg_track_popularity"),
+            F.max("popularity").alias("max_track_popularity"),
         )
 
         df_artists_small = df_artists.select(
-            col("artist_id"), col("name").alias("artist_name"), "genres", col("followers_total")
+            F.col("artist_id"),
+            F.col("name").alias("artist_name"),
+            "genres",
+            F.col("followers_total"),
         )
 
         # --- [ADVANCED] Broadcast Join ---
-        # Bảng Artists (nhỏ) được broadcast đến tất cả node chứa Tracks (lớn) để join nhanh hơn
-        df_gold = (
-            df_stats.join(broadcast(df_artists_small), on="artist_id", how="left")
-                    .orderBy(col("track_count").desc())
+        # Artists (small) is broadcast to every node holding Tracks (large).
+        # The pre-write global orderBy was dropped (PR-08): ranking is a query-
+        # time concern and a full sort before write is wasted shuffle.
+        df_gold = df_stats.join(
+            F.broadcast(df_artists_small), on="artist_id", how="left"
         )
         # ---------------------------------
 
-        output_path = f"{GOLD}/artists_stats/ingest_date={INGEST_DATE}"
-        df_gold.write.mode("overwrite").parquet(output_path)
-        print(f"✅ Saved Artists Stats")
-        
-    except Exception as e: print(f"❌ Error Artists: {e}")
+        write_gold(df_gold, "artists_stats")
+        print("✅ Saved Artists Stats")
 
-def build_gold_albums_stats():
-    print(f"\n=== GOLD: albums_stats ===")
+    except Exception as e:
+        print(f"❌ Error Artists: {e}")
+
+
+def build_gold_albums_stats(spark):
+    print("\n=== GOLD: albums_stats ===")
     try:
-        df_tracks = spark.read.parquet(f"{SILVER}/tracks/ingest_date={INGEST_DATE}")
-        df_albums = spark.read.parquet(f"{SILVER}/albums/ingest_date={INGEST_DATE}")
+        df_tracks = read_silver(spark, "tracks")
+        df_albums = read_silver(spark, "albums")
 
         # --- [ADVANCED] Window Function ---
-        # Yêu cầu: Xếp hạng các bài hát trong từng Album theo độ phổ biến
-        windowSpec = Window.partitionBy("album_id").orderBy(col("popularity").desc())
-        
-        # Chỉ lấy bài hát Top 1 của mỗi album (The hit song)
-        df_top_track = df_tracks.withColumn("rank", row_number().over(windowSpec)) \
-                                .filter(col("rank") == 1) \
-                                .select("album_id", col("name").alias("top_track_name"), col("popularity").alias("top_track_pop"))
+        # Rank tracks within each album by popularity, keep the top track.
+        window_spec = Window.partitionBy("album_id").orderBy(F.col("popularity").desc())
+        df_top_track = (
+            df_tracks.withColumn("rank", F.row_number().over(window_spec))
+            .filter(F.col("rank") == 1)
+            .select(
+                "album_id",
+                F.col("name").alias("top_track_name"),
+                F.col("popularity").alias("top_track_pop"),
+            )
+        )
         # ----------------------------------
 
-        # Aggregation thường
         df_stats = df_tracks.groupBy("album_id").agg(
-            count("track_id").alias("total_tracks"),
-            avg("popularity").alias("avg_pop")
+            F.count("track_id").alias("total_tracks"),
+            F.avg("popularity").alias("avg_pop"),
         )
 
-        # Join với Window Result
-        df_final = df_stats.join(df_top_track, on="album_id", how="left") \
-                           .join(df_albums, on="album_id", how="left")
+        df_final = df_stats.join(df_top_track, on="album_id", how="left").join(
+            df_albums, on="album_id", how="left"
+        )
 
-        output_path = f"{GOLD}/albums_stats/ingest_date={INGEST_DATE}"
-        df_final.write.mode("overwrite").parquet(output_path)
-        print(f"✅ Saved Albums Stats")
+        write_gold(df_final, "albums_stats")
+        print("✅ Saved Albums Stats")
 
-    except Exception as e: print(f"❌ Error Albums: {e}")
+    except Exception as e:
+        print(f"❌ Error Albums: {e}")
+
 
 if __name__ == "__main__":
-    build_gold_artists_stats()
-    build_gold_albums_stats()
+    spark = get_spark_session()
+    build_gold_artists_stats(spark)
+    build_gold_albums_stats(spark)
     spark.stop()
