@@ -1,16 +1,31 @@
 # Flink — real-time anomaly detection
 
-`AnomalyDetectionJob` consumes the playback-events topic from Kafka and (for now)
-filters candidate anomalies to `stdout`. This module builds a shaded uber-jar
-that is submitted to a Flink cluster.
+`AnomalyDetectionJob` consumes the playback-events topic from Kafka, detects
+per-user skip bursts over event-time windows, and emits anomalies to a Kafka
+topic. This module builds a shaded uber-jar submitted to a Flink cluster.
 
 ## Status
 
-- **This PR (PR-05):** migrates the source off the removed `FlinkKafkaConsumer`
-  API to the Flink 1.17 `KafkaSource`, so the module **compiles and packages**
-  again. The detection logic is unchanged (a stateless string filter + `print()`
-  sink) — genuinely **stateful, windowed** anomaly detection and a Kafka anomaly
-  sink land in **PR-10**.
+- **PR-10 (current):** genuinely **stateful, windowed** detection. Events are
+  parsed to `PlaybackEvent`, assigned event-time watermarks, `keyBy(user_id)`,
+  and counted over a tumbling window; a user with more than
+  `ANOMALY_SKIP_THRESHOLD` `skipped` plays in the window emits an `Anomaly`
+  (JSON) to `TOPIC_ANOMALY`. Checkpointing is enabled so the keyed window state
+  is durable and recovers on restart.
+- **PR-05 (prior):** migrated the source off the removed `FlinkKafkaConsumer`
+  API to the Flink 1.17 `KafkaSource` (compile-only).
+
+## Pipeline
+
+```
+KafkaSource(TOPIC_PLAYBACK, String)
+  -> flatMap: JSON -> PlaybackEvent (drop malformed)
+  -> assignTimestampsAndWatermarks (event time = producer `timestamp`)
+  -> keyBy(user_id)
+  -> window(TumblingEventTime, ANOMALY_WINDOW_SECONDS)
+  -> process: count `skipped`; if > ANOMALY_SKIP_THRESHOLD emit Anomaly
+  -> KafkaSink(TOPIC_ANOMALY, JSON)
+```
 
 ## Build
 
@@ -37,8 +52,12 @@ flink run -c com.spotify.anomaly.AnomalyDetectionJob \
 | :--- | :--- | :--- |
 | `KAFKA_BROKER` | `kafka.bigdata:9092` | Kafka bootstrap servers |
 | `TOPIC_PLAYBACK` | `spotify_playback_events` | Source topic — matches the producer and `common/config.py` |
+| `TOPIC_ANOMALY` | `spotify_anomaly_events` | Sink topic for detected anomalies (matches `common.config.TOPIC_ANOMALY`) |
+| `ANOMALY_SKIP_THRESHOLD` | `5` | Skips per user per window that trigger an anomaly |
+| `ANOMALY_WINDOW_SECONDS` | `60` | Tumbling event-time window length |
+| `FLINK_CHECKPOINTS` | *(cluster default)* | Optional checkpoint storage dir (e.g. `s3a://spotify-checkpoints/flink`) |
 
-`TOPIC_PLAYBACK` uses the same name and default as the Python `common.config`
+`TOPIC_PLAYBACK` / `TOPIC_ANOMALY` use the same names and defaults as the Python `common.config`
 so the whole platform reads/writes one unified topic (finding A2). Java cannot
 import the Python module, hence the shared **env-var convention** rather than a
 shared constant.

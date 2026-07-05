@@ -3,6 +3,60 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-10 — Stateful Flink windowed anomaly detection + Kafka sink
+
+**Type:** feat (flink) · **Branch:** `pr-010-stateful-flink` (off `main`)
+
+### Context
+The docs promise stateful windows ("skip > N in 1 min") but the Flink job was a
+stateless string `filter` + `print()` sink that matched fields (`action`,
+`duration`) which do not even exist in the real event schema (findings A5, D1).
+
+### Changed
+- **`AnomalyDetectionJob.java`** — real event-time pipeline: parse JSON →
+  `PlaybackEvent` (drop malformed), assign bounded-out-of-orderness watermarks
+  from the producer `timestamp`, `keyBy(user_id)`, tumbling event-time window,
+  and a `ProcessWindowFunction` counting `skipped` plays. A user over
+  `ANOMALY_SKIP_THRESHOLD` skips in the window emits an `Anomaly` to a Kafka
+  `KafkaSink` on `TOPIC_ANOMALY`. Checkpointing enabled (durable keyed state).
+- **`model/PlaybackEvent.java`**, **`model/Anomaly.java`** (new) — Flink-friendly
+  POJOs; Jackson-annotated (snake_case ↔ camelCase), `ignoreUnknown`.
+- **`pom.xml`** — add `jackson-databind` (bundled into the uber-jar).
+- **`flink_jobs/README.md`** — pipeline diagram + new env vars.
+
+### Design decisions
+1. **Event-time windows, not processing-time.** Watermarks from the event
+   `timestamp` make the "N skips per minute" detection correct under lateness and
+   replay, and reproducible from checkpoints.
+2. **`ProcessWindowFunction` counting skips.** Clear and correct at this scale;
+   the window's keyed state is what makes the job genuinely stateful (the
+   acceptance criterion). Checkpointing makes in-flight windows recoverable.
+3. **Threshold/window/topic via env.** Same env-var convention as the Python
+   `common.config` (Java can't import it), so `TOPIC_PLAYBACK`/`TOPIC_ANOMALY`
+   stay unified platform-wide.
+4. **Resilient (de)serialization.** Malformed events and un-serializable
+   anomalies are dropped in `flatMap` rather than failing the job.
+
+### Verification
+- `mvn -B clean package` → **BUILD SUCCESS**; the shaded uber-jar contains the
+  new `com.spotify.anomaly.*` classes + bundled Jackson (verified via `jar tf`).
+- Live stateful behaviour (a skip burst → exactly one anomaly, restart-from-
+  checkpoint) needs a running Kafka + Flink cluster (documented in the README,
+  not runnable here).
+
+### New environment variables
+| Variable | Default | Notes |
+| :--- | :--- | :--- |
+| `TOPIC_ANOMALY` | `spotify_anomaly_events` | Anomaly sink topic (matches `common.config`). |
+| `ANOMALY_SKIP_THRESHOLD` | `5` | Skips per user per window that trigger an anomaly. |
+| `ANOMALY_WINDOW_SECONDS` | `60` | Tumbling event-time window length. |
+| `FLINK_CHECKPOINTS` | *(cluster default)* | Optional checkpoint storage dir. |
+
+### Rollback
+`git revert` restores the prior compile-only job. The new job writes to a *new*
+topic (`TOPIC_ANOMALY`), so no existing consumer is disrupted; checkpoints are
+namespaced per job, so a rollback redeploys the old jar cleanly.
+
 ## PR-09 — Dimensional model: star schema + SCD2 dimensions
 
 **Type:** feat (modeling) · **Branch:** `pr-009-star-schema` (stacks on PR-08)
