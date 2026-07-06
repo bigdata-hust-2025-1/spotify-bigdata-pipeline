@@ -3,6 +3,52 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-15 — Data-quality gates between layers
+
+**Type:** feat (quality) · **Branch:** `pr-015-data-quality` (off `main`)
+
+### Context
+There were no row-count / null / uniqueness / referential / freshness checks, so
+bad data flowed silently to Gold / serving (finding H2).
+
+### Added / Changed
+- **`spark_jobs/quality/checks.py`** (new) — reusable gates:
+  - Pure evaluators (`non_null_keys`, `unique_keys`, `fk_resolved`,
+    `value_in_range`, `freshness`) + `CheckResult` + `DataQualityReport`
+    (`log()` emits `dq_check` metrics, `raise_if_failed()` raises
+    `DataQualityError` on any BLOCK breach). All JVM-free / unit-testable.
+  - Spark-executing helpers (`key_checks`, `range_check`, `fk_check`,
+    `freshness_check`) with **deferred** `pyspark` import; `fk_check` reuses
+    `common.modeling.unresolved_fk_count_sql` (PR-09).
+  - Severity is configurable via `DATA_QUALITY_SEVERITY` = `block` (default) /
+    `warn`.
+- **`spark_jobs/batch/bronze_to_silver_all.py`** — runs the non-null + uniqueness
+  gate on each dataset's business key **before** the Silver write; a breach is
+  recorded by the `FailureCollector` (PR-13) so the job exits non-zero and bad
+  rows never land in Silver.
+- **`tests/test_quality.py`** (new, 10 tests) — seeded null-key / duplicate /
+  broken-FK / out-of-range / stale fixtures fail the gate; clean data passes;
+  results log as JSON `dq_check` metrics; `warn` never blocks.
+- **`docs/DATA_QUALITY.md`** (new).
+
+### Design decisions
+1. **Pure evaluators + lazy-Spark executors.** The decision logic is unit-tested
+   without a JVM (matching `common.spark`/`common.modeling`); only count
+   computation touches Spark. This is why the gate is fully covered in CI (no
+   cluster) yet real in production.
+2. **Gate before write, fail via FailureCollector.** Running pre-write means bad
+   data is never persisted; recording through PR-13's collector means one bad
+   dataset fails the whole job loudly (non-zero) rather than silently.
+3. **Configurable severity.** `warn` mode lets gates be rolled out on historical
+   data before flipping to `block`.
+
+### Verification
+`python tests/test_quality.py` → **10/10 PASS**; full suite **67 passed, 3
+skipped** under pytest; `ruff` clean. End-to-end DAG-fails-on-corrupted-layer is
+the integration test (needs Spark; documented in `docs/DATA_QUALITY.md`).
+
+---
+
 ## PR-14 — CI pipeline: lint · secret scan · conflict guard · pytest · Flink build
 
 **Type:** ci · **Branch:** `pr-014-ci-pipeline` (off `main`)
