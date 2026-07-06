@@ -2,8 +2,7 @@ import os
 import sys
 
 from pyspark.sql import functions as F
-from pyspark.sql.functions import col, concat_ws, expr, lit, udf
-from pyspark.sql.types import StringType
+from pyspark.sql.functions import col, concat_ws, expr, lit
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _REPO_ROOT not in sys.path:
@@ -43,23 +42,46 @@ BUSINESS_KEYS = {
 }
 
 
-# --- [ADVANCED] Custom UDF: Phân loại độ dài bài hát ---
-# Yêu cầu: Custom UDFs for specific business logic
+# --- Duration categorisation (Phân loại độ dài bài hát) ---
+# Thresholds in milliseconds (single source of truth, shared by the pure
+# reference below and the native expression). <3 min = Short, 3–5 min = Medium.
+DURATION_SHORT_MS = 180_000   # 3 minutes
+DURATION_MEDIUM_MS = 300_000  # 5 minutes
+
+
 def categorize_duration(ms):
-    if not ms:
+    """Reference categorisation — pure Python, the single source of truth for
+    the boundary semantics (unit-tested in CI with no JVM).
+
+    The hot path uses :func:`duration_category_expr`, a native Spark expression
+    that mirrors this exactly; keeping this pure function lets the boundaries be
+    verified without a Spark runtime.
+    """
+    if not ms:                       # None or 0 ms
         return "Unknown"
-    sec = ms / 1000
-    if sec < 180:
-        return "Short"     # Dưới 3 phút
-    elif sec < 300:
-        return "Medium"    # 3-5 phút
-    else:
-        return "Long"      # Trên 5 phút
+    if ms < DURATION_SHORT_MS:
+        return "Short"
+    if ms < DURATION_MEDIUM_MS:
+        return "Medium"
+    return "Long"
 
 
-# Đăng ký UDF với Spark
-duration_udf = udf(categorize_duration, StringType())
-# -------------------------------------------------------
+def duration_category_expr(ms_col="duration_ms"):
+    """Native (codegen) equivalent of :func:`categorize_duration`.
+
+    Replaces the former Python UDF (finding C4): categorisation now runs inside
+    the JVM with no per-row Python (de)serialisation across the boundary, which
+    is the expensive part of a UDF in the hot path. Returns a
+    :class:`~pyspark.sql.Column` built from the same thresholds.
+    """
+    ms = F.col(ms_col)
+    return (
+        F.when(ms.isNull() | (ms == 0), "Unknown")
+        .when(ms < DURATION_SHORT_MS, "Short")
+        .when(ms < DURATION_MEDIUM_MS, "Medium")
+        .otherwise("Long")
+    )
+# ----------------------------------------------------------
 
 
 def get_spark_session():
@@ -88,6 +110,9 @@ def write_iceberg(spark, dataset_name, df_clean, key_columns):
         f"CREATE TABLE IF NOT EXISTS {table} "
         "USING iceberg "
         "PARTITIONED BY (days(ingest_ts)) "
+        # Target ~128 MiB data files on write so MERGE/streaming don't accumulate
+        # tiny files (finding J2); complements the compaction job (PR-08).
+        "TBLPROPERTIES ('write.target-file-size-bytes'='134217728') "
         f"AS SELECT * FROM {source_view} WHERE 1=0"
     )
     spark.sql(build_merge_sql(table, source_view, key_columns))
@@ -111,12 +136,15 @@ def process_dataset(spark, dataset_name, transform_func):
     input_path = f"{BRONZE_PATH}/{dataset_name}/ingest_date={INGEST_DATE}"
     with stage_timer(LOG, dataset_name, format=SILVER_FORMAT, input=input_path) as m:
         df = spark.read.option("multiline", "true").json(input_path)
-        rows_in = df.count()
-        m["rows_in"] = rows_in
-        if rows_in == 0:
+        # Short-circuit an empty date-partition with isEmpty() (stops at the first
+        # row) instead of a full count()-as-guard — a common, cheap case during
+        # backfills. The full count is only taken below, as a real metric.
+        if df.isEmpty():
+            m["rows_in"] = 0
             m["skipped"] = True
             LOG.warning("empty_input", extra={"stage": dataset_name, "date": INGEST_DATE})
             return
+        m["rows_in"] = df.count()
 
         df_clean = transform_func(df)
         m["rows_out"] = df_clean.count()
@@ -147,9 +175,8 @@ def transform_tracks(df):
         col("track_number"),
         col("duration_ms"),
         (col("duration_ms") / 1000).alias("duration_sec"),
-        # --- [ADVANCED] Áp dụng UDF ---
-        duration_udf(col("duration_ms")).alias("duration_category"),
-        # ------------------------------
+        # Native duration categorisation (no Python UDF in the hot path).
+        duration_category_expr().alias("duration_category"),
         col("explicit"),
         col("popularity"),
         col("release_date"),
