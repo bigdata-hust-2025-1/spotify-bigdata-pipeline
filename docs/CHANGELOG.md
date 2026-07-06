@@ -3,6 +3,44 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-22 — Docs split: Implemented vs Roadmap + quickstart + ERD
+
+**Type:** docs · **Branch:** `pr-022-docs-split` (off `main`) · **final roadmap PR**
+
+### Context
+The docs presented aspiration as built — the README architecture diagram showed
+Trino, an alert system, and a dashboard as if shipped (finding K1, the review's
+central gap). Now every claim maps to merged code or is labelled roadmap.
+
+### Added / Changed
+- **`README.md`**
+  - **Implemented vs Roadmap** — an honest two-part status table: each shipped
+    component linked to its code + PR, and the still-aspirational pieces (Trino,
+    alert-system consumer, full dashboard, raw-events-to-lake, the
+    Iceberg-format cutover) clearly labelled roadmap.
+  - **Star-schema ERD** — a rendered Mermaid `erDiagram` (SCD2 dims →
+    `fact_playback` at event grain), summarising `docs/DATA_MODEL.md`.
+  - **Quickstart** — end-to-end: local tests (`pytest`/`ruff`), `.env` setup,
+    Kustomize infra apply, batch ETL run, and the MLOps loop.
+  - **Docs index** — links to every shipped doc.
+  - A note under the architecture diagram flagging it as the *target* design.
+
+### Acceptance criteria
+- [x] Every doc claim maps to running code or is clearly labelled roadmap.
+- [x] A reader can run the pipeline from the quickstart.
+- [x] ERD present (Mermaid, GitHub-rendered).
+
+The untracked, generated `docs/DATA_ENGINEERING_KNOWLEDGE_BASE.md` is
+intentionally not modified (not part of the tracked source).
+
+### Rollback
+Docs-only; revert restores the prior README. No runtime impact.
+
+---
+
+> **Roadmap complete.** With PR-22 merged, all 22 roadmap PRs (PR-01…PR-22)
+> across Phases 0–3 are delivered.
+
 ## PR-21 — Naming & typo cleanup (`sliver` → `silver`)
 
 **Type:** refactor (naming) · **Branch:** `pr-021-naming-typo` (off `main`)
