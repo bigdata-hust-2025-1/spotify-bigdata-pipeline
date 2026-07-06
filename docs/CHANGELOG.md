@@ -3,6 +3,30 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-21 — Naming & typo cleanup (`sliver` → `silver`)
+
+**Type:** refactor (naming) · **Branch:** `pr-021-naming-typo` (off `main`)
+
+### Context
+`minIO/get_data_sliver.py` misspelled "silver" in its filename (finding K3).
+
+### Added / Changed
+- **Renamed** `minIO/get_data_sliver.py` → `minIO/get_data_silver.py`. Nothing
+  imported it by module name, so no import updates were needed; its content
+  already used the correct `spotify-silver` bucket and required no change.
+- **`minIO/README.md`** — updated the reference to the corrected filename.
+
+The `"Silver Sliver"` string in `data/tracks.json` is a track **name** (data),
+not a typo, and is left as-is.
+
+### Acceptance criteria
+- [x] No `sliver` typo in code/filenames (`git grep` clean except the data value).
+- [x] Imports updated (none referenced the old name).
+- [x] Code identifiers consistent.
+
+### Rollback
+Pure rename; revert restores the old filename. No behaviour change.
+
 ## PR-20 — Repo hygiene: untrack artifacts, LICENSE, module READMEs
 
 **Type:** chore (hygiene) · **Branch:** `pr-020-repo-hygiene` (off `main`)
