@@ -11,6 +11,16 @@ env/
 
 .vscode/
 
+# JetBrains IDE
+.idea/
+
+# Generated pipeline data — never commit Bronze/Silver/Gold output, exports, or
+# local object-store dumps. Keep these locally, out of git.
+/data/
+minIO/data/
+minIO/tracks_full.csv
+*.parquet
+
 # Java / Maven build output (e.g. flink_jobs/target/)
 target/
 *.class
