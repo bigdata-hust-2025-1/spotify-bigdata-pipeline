@@ -1,0 +1,23 @@
+# gitleaks configuration for the CI secret-scan gate (PR-14).
+#
+# CI runs `gitleaks detect --no-git` so it scans the *current working tree* (what
+# a change would introduce) rather than full history — the original committed
+# secrets were rotated and removed from the tree in PR-02, but they remain in old
+# commits and cannot be scrubbed without a history rewrite. Scanning the tree
+# keeps the gate meaningful (a NEW secret fails the build) without failing on
+# unremediable history.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Known, already-rotated placeholder credential still present in some legacy
+Kubernetes / Spark manifests. It is dead (rotated) and tracked for full removal
+in a secrets-hygiene follow-up; allowlisted so it does not mask detection of any
+genuinely new secret.
+"""
+regexes = [
+    '''miniopass123''',
+    '''minioadmin''',
+]
