@@ -3,6 +3,49 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-13 — Fail-fast error handling + structured JSON logging + stage metrics
+
+**Type:** feat (observability) · **Branch:** `pr-013-structured-logging` (stacked on `pr-012-batch-orchestration`)
+
+### Context
+The batch jobs wrapped each dataset in `except Exception: print(); return`, so a
+partial failure was swallowed and the job still exited **0** (findings C5, H1).
+`print`-logging is also unparseable and there were no metrics.
+
+### Added / Changed
+- **`common/logging.py`** (new) — pure-stdlib (no JVM):
+  - `get_logger()` emits single-line **JSON** to stdout, each record carrying a
+    process `run_id` (pinnable via `PIPELINE_RUN_ID`); idempotent per name.
+  - `log_metrics()` / `stage_timer` emit per-stage row counts + duration.
+  - `FailureCollector` isolates per-dataset failures (attempt them all) but
+    `raise_if_any()` re-raises a `PipelineError` at the end → **non-zero exit**.
+- **`spark_jobs/batch/bronze_to_silver_all.py`**, **`silver_to_gold_all.py`**,
+  **`gold_to_es.py`** — the three orchestrated (PR-12 DAG) batch jobs: `print`
+  replaced with the JSON logger; each dataset wrapped in a `stage_timer`
+  (rows_in/rows_out/duration) and driven from a `main()` loop that uses
+  `FailureCollector` — a failing dataset now fails the whole job loudly.
+- **`tests/test_logging.py`** (new) — JSON+run-id, metrics fields, `stage_timer`
+  start/end/error (no swallow), idempotent logger, and FailureCollector
+  isolate-then-raise-non-zero.
+
+### Design decisions
+1. **Isolate then fail loudly.** Per-dataset isolation is still useful (one bad
+   dataset shouldn't skip the rest), but the job must exit non-zero if any failed
+   — `FailureCollector` gives both, replacing the silent `print(); return`.
+2. **JSON to stdout with a run id.** Operable/greppable logs that correlate
+   across a run (and across Airflow tasks when `PIPELINE_RUN_ID` is set).
+3. **Scope: the orchestrated batch path first.** The three jobs on the PR-12 DAG
+   (which carried the swallow-bug) are converted now; the remaining exploratory
+   `minIO/*`, `get_data_*`, `mlops/*`, and stream scripts adopt the same helper
+   incrementally (additive-first, keeps the diff reviewable).
+
+### Verification
+`python tests/test_logging.py` → **7/7 PASS** (JSON parse, run id, metrics,
+fail-loud non-zero). Full suite green; `ruff` clean. The Spark jobs import
+`pyspark` at module top so they run on a cluster (AST-validated here).
+
+---
+
 ## PR-12 — Airflow orchestrates Spark on K8s + idempotent, scheduled maintenance
 
 **Type:** feat (airflow) · **Branch:** `pr-012-batch-orchestration` (stacked on `pr-011-airflow-hygiene`; merge PR-11 first)

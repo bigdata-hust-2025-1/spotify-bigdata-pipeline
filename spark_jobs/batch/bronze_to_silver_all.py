@@ -10,7 +10,14 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from common.config import BRONZE_BUCKET, SILVER_BUCKET, get_ingest_date  # noqa: E402
+from common.logging import (  # noqa: E402
+    FailureCollector,
+    get_logger,
+    stage_timer,
+)
 from common.spark import build_merge_sql, build_spark, silver_table  # noqa: E402
+
+LOG = get_logger("bronze_to_silver")
 
 # s3a paths for the medallion buckets (bucket names come from common.config).
 BRONZE_PATH = f"s3a://{BRONZE_BUCKET}"
@@ -83,37 +90,40 @@ def write_iceberg(spark, dataset_name, df_clean, key_columns):
         f"AS SELECT * FROM {source_view} WHERE 1=0"
     )
     spark.sql(build_merge_sql(table, source_view, key_columns))
-    print(f"    [OK] MERGE upsert into Iceberg table {table}")
+    LOG.info("iceberg_merge", extra={"stage": dataset_name, "table": table})
 
 
 def write_parquet(dataset_name, df_clean):
     """Legacy behaviour: overwrite the date-partitioned Parquet directory."""
     output_path = f"{SILVER_PATH}/{dataset_name}/ingest_date={INGEST_DATE}"
-    print(f"--> Writing Parquet to: {output_path}")
     df_clean.write.mode("overwrite").parquet(output_path)
-    print(f"    [OK] {dataset_name} written as Parquet")
+    LOG.info("parquet_write", extra={"stage": dataset_name, "path": output_path})
 
 
 def process_dataset(spark, dataset_name, transform_func):
-    print(f"\n=== PROCESSING: {dataset_name} ({SILVER_FORMAT}) ===")
-    input_path = f"{BRONZE_PATH}/{dataset_name}/ingest_date={INGEST_DATE}"
+    """Read → transform → write one dataset. Raises on failure (fail loudly).
 
-    try:
-        print(f"--> Reading directory: {input_path}")
+    Per-dataset isolation is handled by the caller's FailureCollector; this
+    function no longer swallows errors, so a genuine failure propagates instead
+    of the job silently exiting 0 (findings C5, H1).
+    """
+    input_path = f"{BRONZE_PATH}/{dataset_name}/ingest_date={INGEST_DATE}"
+    with stage_timer(LOG, dataset_name, format=SILVER_FORMAT, input=input_path) as m:
         df = spark.read.option("multiline", "true").json(input_path)
-        if df.count() == 0:
-            print(f"    [SKIP] no {dataset_name} rows for {INGEST_DATE}")
+        rows_in = df.count()
+        m["rows_in"] = rows_in
+        if rows_in == 0:
+            m["skipped"] = True
+            LOG.warning("empty_input", extra={"stage": dataset_name, "date": INGEST_DATE})
             return
 
         df_clean = transform_func(df)
+        m["rows_out"] = df_clean.count()
 
         if SILVER_FORMAT == "iceberg":
             write_iceberg(spark, dataset_name, df_clean, BUSINESS_KEYS[dataset_name])
         else:
             write_parquet(dataset_name, df_clean)
-
-    except Exception as e:
-        print(f"!!! ERROR processing {dataset_name}: {str(e)}")
 
 
 # --- CÁC HÀM TRANSFORMATION ---
@@ -206,11 +216,31 @@ def transform_playlists(df):
     return df.select(*select_exprs)
 
 
-if __name__ == "__main__":
+DATASETS = [
+    ("tracks", transform_tracks),
+    ("albums", transform_albums),
+    ("artists", transform_artists),
+    ("owners", transform_owners),
+    ("playlists", transform_playlists),
+]
+
+
+def main():
+    LOG.info("job_start", extra={"job": "bronze_to_silver", "date": INGEST_DATE,
+                                 "format": SILVER_FORMAT})
     spark = get_spark_session()
-    process_dataset(spark, "tracks", transform_tracks)
-    process_dataset(spark, "albums", transform_albums)
-    process_dataset(spark, "artists", transform_artists)
-    process_dataset(spark, "owners", transform_owners)
-    process_dataset(spark, "playlists", transform_playlists)
-    spark.stop()
+    failures = FailureCollector(LOG)
+    try:
+        for dataset_name, transform_func in DATASETS:
+            # Isolate per-dataset failures but keep going; the summary below
+            # re-raises so the job exits non-zero if any dataset failed.
+            with failures.collect(dataset_name):
+                process_dataset(spark, dataset_name, transform_func)
+    finally:
+        spark.stop()
+    failures.raise_if_any()
+    LOG.info("job_done", extra={"job": "bronze_to_silver"})
+
+
+if __name__ == "__main__":
+    main()
