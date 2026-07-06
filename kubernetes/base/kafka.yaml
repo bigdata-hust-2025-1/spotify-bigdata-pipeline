@@ -1,4 +1,4 @@
-# kubernetes/kafka.yaml
+# kubernetes/base/kafka.yaml
 # PV cho Kafka
 apiVersion: v1
 kind: PersistentVolume

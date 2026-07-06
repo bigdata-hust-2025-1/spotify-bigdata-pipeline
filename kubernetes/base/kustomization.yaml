@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base bundle of the platform's raw (non-Helm) infrastructure manifests.
+# The Airflow and spark-operator components are installed via Helm (see
+# ../helm/*), so they are intentionally NOT listed here.
+#
+# Namespaces are pinned per-resource inside each manifest (bigdata / airflow),
+# so this base deliberately does NOT set a global `namespace:` transformer.
+#
+# Render with:  kubectl kustomize kubernetes/overlays/dev
+resources:
+  - namespaces.yaml
+  - kafka.yaml
+  - kafka-ui.yaml
+  - minio.yaml
+  - mongodb.yaml
+  - elk.yaml
+  - airflow-postgres.yaml
+  - rbac-airflow-bigdata.yaml
+
+# Shared labels so every rendered object is traceable to this repo/release.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: spotify-bigdata-pipeline
+      app.kubernetes.io/managed-by: kustomize

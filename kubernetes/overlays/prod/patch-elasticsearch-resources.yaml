@@ -1,0 +1,19 @@
+# Prod gives Elasticsearch a larger heap and a matching memory limit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  namespace: bigdata
+spec:
+  template:
+    spec:
+      containers:
+        - name: elasticsearch
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xms1536m -Xmx1536m"
+          resources:
+            requests:
+              memory: "2Gi"
+            limits:
+              memory: "3Gi"
