@@ -2,6 +2,8 @@ minio
 kafka-python
 elasticsearch==7.17.9
 pandas
+scikit-learn
+mlflow
 streamlit
 plotly
 watchdog
