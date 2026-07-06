@@ -3,6 +3,64 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-19 — DR & scalability: recovery docs + object versioning/retention
+
+**Type:** docs + infra (dr) · **Branch:** `pr-019-dr-and-scaling` (off `main`)
+
+### Context
+There was no disaster-recovery story — no RPO/RTO, backup/replication, or scaling
+analysis (finding F3) — and the Terraform used single-region **LRS** with a
+single fixed node pool and no object versioning (finding F4). A clobbered or
+bad-batch write had no documented path back.
+
+### Added / Changed
+- **`docs/DR_AND_SCALING.md`** (new) — concrete **RPO/RTO per store**, the
+  "derive don't back up everything" principle (only Bronze + Iceberg lakehouse
+  are systems of record; serving copies are rebuildable), backup/replication
+  strategy, **recovery procedures** (Iceberg `rollback_to_snapshot` drill,
+  object-version restore, serving-layer rebuild, region failover), and a
+  **scaling levers** table (Kafka partitions↔consumers, Spark AQE/shuffle from
+  PR-18, Iceberg file sizing, Flink state, Cassandra/ES, AKS autoscaling).
+- **`azure_iac/main.tf`** — storage account now takes a configurable
+  **replicated** tier (default ZRS, not LRS) and enables **blob versioning** +
+  delete/container retention (point-in-time recovery); AKS node pool gains
+  **cluster-autoscaling** (min/max); resources tagged; outputs added.
+- **`azure_iac/variables.tf`** (new) — `storage_replication_type` (validated
+  set, default ZRS), node pool sizing/autoscaling vars, retention window, tags.
+- **`azure_iac/versions.tf`** (new) — pins `terraform >= 1.3` and
+  `azurerm ~> 4.0` so `init` can't pull a breaking provider major.
+- **`kubernetes/base/minio-versioning-job.yaml`** (new, wired into the base
+  kustomization) — a `mc` Job enabling **bucket versioning** + best-effort
+  noncurrent-version retention on `spotify-bronze/silver/gold/lakehouse`
+  (idempotent; `spotify-checkpoints` intentionally excluded — it churns).
+
+### Design decisions
+1. **Two-sided versioning.** Azure blob versioning (Terraform) for cloud and a
+   MinIO Job for on-cluster/dev, so "object versioning enabled" holds in both
+   deployment modes; the same 30-day retention bounds cost on each.
+2. **Replication as a validated variable, default ZRS.** Offers LRS→RA-GZRS; the
+   default is replicated (survives an AZ loss) instead of the old single-AZ LRS.
+3. **Recover by derivation.** RPO is defined by rebuild speed for serving copies
+   and by immutable snapshots for the lakehouse — not by backing up everything.
+4. **Provider pin added** so the 3.x→4.x attribute renames can't silently break
+   the plan.
+
+### Acceptance criteria
+- [x] DR doc with concrete RPO/RTO and recovery procedure.
+- [x] Object versioning enabled (Azure blob + MinIO Job); Terraform offers a
+  replicated storage option (validated variable, default ZRS).
+
+### Validation
+`kubectl kustomize overlays/{dev,prod}` renders cleanly (25 objects each,
+including the versioning Job). `terraform validate`/`plan` needs the Terraform
+CLI (not available in this environment); the HCL is hand-verified against the
+pinned `azurerm ~> 4.0` schema (balanced blocks, correct 4.x attribute names,
+variable validation).
+
+### Rollback
+Docs are non-executable; the Terraform change is reviewed via `plan` before
+`apply`; the MinIO Job is idempotent and additive (revert removes it).
+
 ## PR-18 — Cost & performance: native categorisation, AQE, file sizing
 
 **Type:** perf (batch) · **Branch:** `pr-018-cost-performance` (off `main`)

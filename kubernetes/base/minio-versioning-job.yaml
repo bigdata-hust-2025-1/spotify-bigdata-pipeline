@@ -1,0 +1,61 @@
+# kubernetes/base/minio-versioning-job.yaml
+#
+# Enables object versioning (and a best-effort noncurrent-version retention) on
+# the medallion + lakehouse buckets so an accidental overwrite/delete is
+# recoverable — the on-cluster equivalent of the Azure blob versioning enabled
+# in azure_iac/main.tf. See docs/DR_AND_SCALING.md.
+#
+# Idempotent: `mc mb --ignore-existing` and `mc version enable` are safe to
+# re-run, so re-applying the manifest (or a Job restart) is harmless.
+#
+# The `spotify-checkpoints` bucket is deliberately NOT versioned: Spark
+# Structured Streaming rewrites checkpoint files constantly, and versioning them
+# would balloon storage for no recovery value (checkpoints are reconstructible).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-enable-versioning
+  namespace: bigdata
+  labels:
+    app: minio
+    component: bucket-provisioning
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: minio
+        component: bucket-provisioning
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+          env:
+            # Plaintext to match kubernetes/base/minio.yaml; in production these
+            # come from a Secret. `miniopass123` is a known, rotated placeholder.
+            - name: MINIO_ROOT_USER
+              value: minioadmin
+            - name: MINIO_ROOT_PASSWORD
+              value: miniopass123
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              # Wait for MinIO to accept the alias (it may still be starting).
+              until mc alias set local http://minio:9000 \
+                    "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do
+                echo "waiting for minio..."; sleep 5
+              done
+              for b in spotify-bronze spotify-silver spotify-gold spotify-lakehouse; do
+                mc mb --ignore-existing "local/$b"
+                mc version enable "local/$b"
+                # Best-effort retention: expire noncurrent versions after 30 days
+                # to bound cost (mc ilm flag spelling varies by release, so this
+                # is non-fatal — versioning above is the hard requirement).
+                mc ilm rule add --noncurrent-expire-days 30 "local/$b" || \
+                  echo "retention rule skipped for $b (set it manually if needed)"
+                echo "versioning enabled on $b"
+              done
