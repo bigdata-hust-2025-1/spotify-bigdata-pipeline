@@ -3,9 +3,7 @@ import json
 import os
 import io
 from datetime import datetime, timezone
-from datetime import timedelta
 from kafka import KafkaConsumer
-from kafka import TopicPartition
 from minio import Minio
 from minio.error import S3Error
 # from dotenv import load_dotenv
@@ -25,26 +23,45 @@ TOPICS = {
     "spotify_artists": "artists"
 }
 
-# Khởi tạo MinIO client
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=False
-)
+# NOTE (PR-11): the MinIO client and bucket check are built lazily inside the
+# factories below — never at import time. Airflow re-parses this module every
+# few seconds, so constructing a live client (or running the consume loop) at
+# module scope opened network connections on every parse. run_consume() owns the
+# client lifecycle instead.
 
-# Đảm bảo bucket tồn tại
-try:
-    if not minio_client.bucket_exists(BUCKET_NAME):
-        minio_client.make_bucket(BUCKET_NAME)
-        print(f"Bucket '{BUCKET_NAME}' created successfully.")
-    else:
-        print(f"Bucket '{BUCKET_NAME}' already exists.")
-except S3Error as e:
-    print(f"Error checking/creating bucket: {e}")
+
+def build_minio_client():
+    """Construct the MinIO client. Fails fast if credentials are missing."""
+    if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
+        raise EnvironmentError(
+            "MINIO_ROOT_USER và MINIO_ROOT_PASSWORD phải được thiết lập!"
+        )
+    return Minio(
+        MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=False,
+    )
+
+
+def ensure_bucket(client, bucket=BUCKET_NAME):
+    """Create the bucket if it does not exist (idempotent)."""
+    try:
+        if not client.bucket_exists(bucket):
+            client.make_bucket(bucket)
+            print(f"Bucket '{bucket}' created successfully.")
+        else:
+            print(f"Bucket '{bucket}' already exists.")
+    except S3Error as e:
+        print(f"Error checking/creating bucket: {e}")
+
 
 # Hàm consume và upload (tự động commit offset)
-def consume_and_upload(topic, folder):
+def consume_and_upload(topic, folder, partition_date=None, client=None):
+    if client is None:
+        client = build_minio_client()
+    ensure_bucket(client)
+
     consumer = KafkaConsumer(
         topic,
         bootstrap_servers=KAFKA_BOOTSTRAP,
@@ -63,15 +80,16 @@ def consume_and_upload(topic, folder):
     try:
         for message in consumer:
             data = message.value
-            timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
-            # Chuyển thành datetime object
-            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-
-            # Cộng 1 ngày
-            dt_plus_one_day = dt + timedelta(days=2)
-
-            # Format lại thành string yyyy-mm-dd
-            date_str = dt_plus_one_day.strftime("%Y-%m-%d")
+            if partition_date:
+                # Airflow supplies the run's logical date ({{ ds }}); partition
+                # bronze objects by it so backfills land deterministically.
+                date_str = partition_date
+            else:
+                # Standalone fallback: derive the partition from the record's own
+                # timestamp when no logical date is provided.
+                timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                date_str = dt.strftime("%Y-%m-%d")
 
             item_id = data.get("id", f"unknown_{message.offset}")
             object_name = f"{folder}/{date_str}/{item_id}.json"
@@ -79,7 +97,7 @@ def consume_and_upload(topic, folder):
             json_bytes = json.dumps(data).encode('utf-8')
             json_stream = io.BytesIO(json_bytes)
 
-            minio_client.put_object(
+            client.put_object(
                 BUCKET_NAME,
                 object_name,
                 json_stream,
@@ -101,9 +119,20 @@ def consume_and_upload(topic, folder):
         consumer.close()
         print(f"Hoàn thành topic '{topic}' - Tổng: {count} messages mới")
 
-# Chạy cho từng topic
-print("Kafka to MinIO consumer started (chỉ message mới)...")
-for topic, folder in TOPICS.items():
-    consume_and_upload(topic, folder)
+# ==================== AIRFLOW TASK ENTRYPOINT ====================
+def run_consume(logical_date=None, client=None):
+    """Consume every topic and upload records to MinIO under ``logical_date``.
 
-print("Tất cả topics đã xử lý xong!")
+    Callable invoked by the Airflow ``consume_to_minio`` task. Builds a single
+    MinIO client (unless one is injected for tests), ensures the bucket, and
+    fans out over the topics. Nothing runs at import time (PR-11); the run's
+    ``{{ ds }}`` flows in as ``logical_date`` and drives the object partition.
+    """
+    if client is None:
+        client = build_minio_client()
+    ensure_bucket(client)
+
+    print(f"[consume] logical_date={logical_date} - Kafka to MinIO started...")
+    for topic, folder in TOPICS.items():
+        consume_and_upload(topic, folder, partition_date=logical_date, client=client)
+    print("Tất cả topics đã xử lý xong!")
