@@ -109,6 +109,9 @@ Grain của fact là **một dòng / một sự kiện nghe nhạc** (`event_id`
 SCD2 (surrogate key + `attr_hash` + `valid_from`/`valid_to`/`is_current`). Chi
 tiết: `docs/DATA_MODEL.md`.
 
+Legend: `PK` = surrogate key · `UK` = business/natural key · `FK` → dim surrogate
+key · dims carry SCD2 columns (`attr_hash`, `valid_from`, `valid_to`, `is_current`).
+
 ```mermaid
 erDiagram
     dim_track  ||--o{ fact_playback : track_sk
@@ -117,36 +120,36 @@ erDiagram
 
     dim_track {
         string surrogate_key PK
-        string track_id BK
+        string track_id UK
         string name
-        int    duration_ms
+        int duration_ms
         string duration_category
-        int    popularity
-        bool   is_current "SCD2"
+        int popularity
+        boolean is_current
     }
     dim_artist {
         string surrogate_key PK
-        string artist_id BK
+        string artist_id UK
         string name
-        long   followers_total
-        bool   is_current "SCD2"
+        long followers_total
+        boolean is_current
     }
     dim_album {
         string surrogate_key PK
-        string album_id BK
+        string album_id UK
         string name
         string album_type
-        bool   is_current "SCD2"
+        boolean is_current
     }
     fact_playback {
-        string event_id PK "degenerate / MERGE key"
+        string event_id PK
         string user_id
         timestamp event_time
         string track_sk FK
         string artist_sk FK
         string album_sk FK
-        long   listen_duration_ms
-        int    is_skipped
+        long listen_duration_ms
+        int is_skipped
         string status
     }
 ```
