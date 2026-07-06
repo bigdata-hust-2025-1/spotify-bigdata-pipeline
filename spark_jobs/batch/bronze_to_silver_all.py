@@ -16,6 +16,7 @@ from common.logging import (  # noqa: E402
     stage_timer,
 )
 from common.spark import build_merge_sql, build_spark, silver_table  # noqa: E402
+from spark_jobs.quality.checks import key_checks  # noqa: E402
 
 LOG = get_logger("bronze_to_silver")
 
@@ -119,6 +120,14 @@ def process_dataset(spark, dataset_name, transform_func):
 
         df_clean = transform_func(df)
         m["rows_out"] = df_clean.count()
+
+        # Data-quality gate (PR-15): non-null + unique business key. Runs before
+        # the write so bad data never lands in Silver; a breach raises
+        # DataQualityError (recorded by the caller's FailureCollector → the job
+        # exits non-zero) instead of flowing silently to Gold.
+        report = key_checks(df_clean, BUSINESS_KEYS[dataset_name], f"silver.{dataset_name}")
+        report.log(LOG)
+        report.raise_if_failed()
 
         if SILVER_FORMAT == "iceberg":
             write_iceberg(spark, dataset_name, df_clean, BUSINESS_KEYS[dataset_name])
