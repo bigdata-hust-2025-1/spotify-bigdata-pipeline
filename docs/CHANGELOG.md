@@ -3,6 +3,69 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-16 — MLOps loop: feature table -> training -> MLflow registry
+
+**Type:** feat (mlops) · **Branch:** `pr-016-mlops-loop` (off `main`)
+
+### Context
+`mlops/train_anomaly_model.py` trained on `s3a://datalake/gold/user_behaviors.parquet`
+— a path **no job produced** — so the MLOps story was disconnected (findings
+D3, C6). There was no feature pipeline, no registry staging, and no link to
+pipeline data.
+
+### Added / Changed
+- **`spark_jobs/batch/build_features.py`** (new) — aggregates the star-schema
+  fact `gold_star.fact_playback` (PR-09) into a per-user feature table
+  (`play_count`, `play_duration`, `total_play_duration_ms`, `skip_count`,
+  `skip_rate`, `distinct_tracks`, `as_of_date`). Publishes both an **Iceberg**
+  table (`lakehouse.gold.user_features`, `MERGE`-upsert on `user_id` →
+  idempotent) and a flat **Parquet** export at `FEATURES_PATH` for the trainer.
+  Structured JSON logging (PR-13); fails loudly.
+- **`mlops/train_anomaly_model.py`** (rewrite) — reads the real feature table;
+  pure `train_isolation_forest()` core (validates the `FEATURE_COLUMNS`
+  contract, deterministic `random_state`, deferred `sklearn` import) +
+  `run_training()` MLflow wrapper (deferred `mlflow` import) that logs
+  params/metrics, `log_model`s with `registered_model_name`, and transitions the
+  new version to `Staging`.
+- **`tests/test_mlops.py`** (new, 6 tests) — JVM-free pandas + sklearn: feature
+  contract holds, a planted outlier is flagged `-1`, missing-column / empty
+  table raise, training is reproducible.
+- **`docs/MLOPS.md`** (new) — lifecycle diagram, feature schema, config, run +
+  validation.
+- **`requirements.txt`** (+`scikit-learn`, `mlflow`) and **`requirements-dev.txt`**
+  (+`pandas`, `scikit-learn`) so CI runs the MLOps tests.
+
+### Design decisions
+1. **Pure training core + deferred ML deps.** `train_isolation_forest` is pure
+   pandas/sklearn (no Spark, no MLflow), so the loop's decision logic is fully
+   unit-tested in CI without a cluster — mirroring the `common.spark` /
+   `common.quality` split. `mlflow` is imported only inside `run_training`.
+2. **Feature table = Iceberg source of truth + Parquet handoff.** The Iceberg
+   table is the lakehouse record (idempotent MERGE on `user_id`); the flat
+   Parquet export lets the lightweight sklearn container consume features with
+   pandas, no Iceberg catalog required. One env var (`FEATURES_PATH`) binds both
+   sides.
+3. **Fail loudly on a broken feature contract.** A missing feature column or an
+   empty table raises `ValueError` in the pure core, so a bad upstream table
+   never yields a silently-degenerate model.
+4. **Reuse over reinvention.** Session via `common.spark.build_spark`, table
+   naming via `common.modeling.star_table` / `common.spark.gold_table`, MERGE via
+   `build_merge_sql`, logging via `common.logging` (PR-03/07/09/13).
+
+### Acceptance criteria
+- [x] `train_anomaly_model.py` runs end-to-end against pipeline-produced data
+  (feature table exists; no file-not-found) — the disconnected path is removed
+  and both jobs share `FEATURES_PATH`.
+- [x] A model version is registered in MLflow with logged metrics — `run_training`
+  `log_model(registered_model_name=…)` + `log_metrics` + stage transition.
+- [x] Feature aggregation unit-tested; training core unit-tested (6/6).
+
+### Rollback
+Additive: the feature table + registry entries are new; revert removes
+`build_features.py` and restores the prior trainer. No serving dependency.
+
+---
+
 ## PR-15 — Data-quality gates between layers
 
 **Type:** feat (quality) · **Branch:** `pr-015-data-quality` (off `main`)
