@@ -1,0 +1,88 @@
+name: CI
+
+# Systemic quality gate (PR-14): every push to main and every PR runs lint, a
+# secret scan, a merge-conflict-marker check, the Python unit tests, and a Flink
+# JAR build. This is the guarantee that the P0 class (a merge conflict reaching
+# main), secrets, lint regressions, and Flink API breaks never recur.
+#
+# This workflow's conflict-marker job supersedes the standalone
+# .github/workflows/conflict-guard.yml (removed in this PR).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  conflict-markers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked files for merge conflict markers
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Seven of a marker char at line start, followed by space/tab or EOL,
+          # so decorative "======" rules do not false-positive. This workflow is
+          # excluded so the pattern text never matches itself.
+          pattern='^(<{7}|={7}|>{7}|\|{7})([ \t]|$)'
+          if git grep -nP "$pattern" -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::Unresolved merge conflict markers detected (see above)."
+            exit 1
+          fi
+          echo "OK: no merge conflict markers found."
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check .
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run gitleaks (working tree)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=8.18.4
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          # --no-git scans the current tree (see .gitleaks.toml for rationale);
+          # exit 1 on any finding fails the build.
+          ./gitleaks detect --source . --no-git --redact \
+            --config .gitleaks.toml --exit-code 1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+      - name: Pytest
+        run: pytest
+
+  flink-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+      - name: Build the Flink uber-jar (catches API breaks)
+        run: mvn -q -B -f flink_jobs/pom.xml clean package

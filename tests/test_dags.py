@@ -13,15 +13,14 @@ import os
 import subprocess
 import sys
 import textwrap
+# unittest.SkipTest is recognised as a skip by both pytest (CI) and the
+# standalone _run_all() runner, so tests skip cleanly in either.
+from unittest import SkipTest as _Skip
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DAGS_DIR = os.path.join(_REPO_ROOT, "dags")
 if _DAGS_DIR not in sys.path:
     sys.path.insert(0, _DAGS_DIR)
-
-
-class _Skip(Exception):
-    """Raised to mark a test as skipped (dependency unavailable here)."""
 
 
 def _import_opens_no_socket(module):

@@ -1,0 +1,8 @@
+# Dev / CI dependencies (PR-14). Pinned for reproducible CI runs.
+# The runtime deps live in requirements.txt; these are only needed to lint and
+# test. pyspark is imported (not run) by the pure transform tests, so no JVM is
+# required for pytest.
+ruff==0.11.10
+pytest==8.3.4
+PyYAML==6.0.2
+pyspark==3.5.3

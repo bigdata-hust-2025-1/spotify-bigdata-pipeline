@@ -3,6 +3,61 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-14 — CI pipeline: lint · secret scan · conflict guard · pytest · Flink build
+
+**Type:** ci · **Branch:** `pr-014-ci-pipeline` (off `main`)
+
+### Context
+There was no CI, and a merge conflict had previously reached `main` (I1, I3). CI
+is the systemic guarantee that class of defect — plus secrets, lint regressions,
+and Flink API breaks — never recurs.
+
+### Added / Changed
+- **`.github/workflows/ci.yml`** (new) — five jobs on push-to-main and every PR:
+  `conflict-markers` (folds in and **supersedes** `conflict-guard.yml`), `lint`
+  (`ruff`), `secret-scan` (`gitleaks --no-git`), `test` (`pytest`), `flink-build`
+  (`mvn -f flink_jobs/pom.xml package`).
+- **`.github/workflows/conflict-guard.yml`** — **removed** (superseded by the
+  `conflict-markers` job).
+- **`pyproject.toml`** (new) — Ruff config (default correctness ruleset `E4/E7/E9`
+  + `F`, with legacy/exploratory scripts excluded pending hygiene PRs) and pytest
+  config (`testpaths=tests`).
+- **`requirements-dev.txt`** (new) — pinned `ruff`, `pytest`, `PyYAML`, `pyspark`.
+- **`.gitleaks.toml`** (new) — default rules + an allowlist for the known,
+  already-rotated `miniopass123` placeholder; documents the `--no-git` rationale.
+- **`docs/ci.md`** (new) — the gates and the owner steps to enable branch
+  protection.
+- **`tests/test_dags.py`**, **`tests/test_batch_pipeline.py`** — switched their
+  custom skip exception to `unittest.SkipTest` so the optional-dependency tests
+  **skip** under pytest (previously they errored, which would have made the CI
+  `test` job red).
+
+### Design decisions
+1. **Correctness ruleset, legacy excluded.** Lint enforces the rules the
+   maintained code already satisfies (undefined names, unused imports, syntax) and
+   excludes pre-existing non-compliant legacy scripts, so the gate is green on
+   `main` today and real for new code. Line-length (E501) is intentionally not
+   enforced to avoid churning unrelated pre-existing lines.
+2. **`gitleaks --no-git` + allowlist.** Scanning the working tree (not history)
+   keeps the gate meaningful for new changes without failing on the rotated
+   secrets still living in old commits, which cannot be scrubbed without a rewrite.
+3. **`pyspark` in dev deps, not a JVM.** The pure transform tests only *import*
+   pyspark (SQL-string builders), so `pytest` needs no Spark cluster; other tests
+   skip when Airflow/Kafka/MinIO/Spotify libs are absent.
+4. **One Flink build job** catches the API-break class (A3) that PR-05/PR-10
+   addressed at the source.
+
+### Verification (locally, mirroring the CI jobs)
+- `ruff check .` → **all checks passed**.
+- `pytest` → **57 passed, 3 skipped** (optional-dep tests skip cleanly).
+- `mvn -f flink_jobs/pom.xml clean package` → **BUILD SUCCESS**.
+- conflict-marker scan → none. Tree scanned for PEM keys / cloud tokens / literal
+  passwords → only the allowlisted `miniopass123`.
+- The live pass/fail of the GitHub Actions run and enabling branch protection are
+  owner-side (documented in `docs/ci.md`); `gh` is unauthenticated here.
+
+---
+
 ## PR-13 — Fail-fast error handling + structured JSON logging + stage metrics
 
 **Type:** feat (observability) · **Branch:** `pr-013-structured-logging` (stacked on `pr-012-batch-orchestration`)

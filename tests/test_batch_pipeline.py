@@ -12,6 +12,9 @@ Runnable via pytest or ``python tests/test_batch_pipeline.py`` (needs only PyYAM
 
 import os
 import sys
+# unittest.SkipTest is recognised as a skip by both pytest (CI) and the
+# standalone _run_all() runner, so tests skip cleanly in either.
+from unittest import SkipTest as _Skip
 
 import yaml
 
@@ -30,10 +33,6 @@ _BATCH_SPECS = {
     "run_gold_to_es.yaml": "batch-gold-to-es",
     "run_maintenance.yaml": "batch-maintenance",
 }
-
-
-class _Skip(Exception):
-    """Raised to mark a test as skipped (dependency unavailable here)."""
 
 
 def _render(path):
