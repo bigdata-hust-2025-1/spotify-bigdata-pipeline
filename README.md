@@ -10,26 +10,28 @@
 
 ---
 
-## 📖 Giới thiệu
+## 📖 Overview
 
-Dự án Big Data xử lý dữ liệu hành vi âm nhạc Spotify theo kiến trúc **Lakehouse** và **Streaming Real-time** hiện đại. 
-Dự án được triển khai trên nền tảng Cloud-native Kubernetes Platform, tích hợp ML-Ops & Data Cloud phù hợp với các tiêu chuẩn quy mô Enterprise.
-
----
-
-## 🎯 Điểm nhấn Kỹ thuật (Key Features)
-
-* **Kubernetes Data Platform**: Triển khai ecosystem (Spark, Kafka, MinIO/Azure DL) trên Kubernetes (AKS).
-* **Lakehouse Architecture**: Xây dựng kiến trúc Medallion (Bronze - Silver - Gold) với **Apache Iceberg**, đảm bảo tính toàn vẹn (ACID Transactions).
-* **High-Throughput ETL (Batch)**: Apache Spark + PySpark thực hiện làm sạch dữ liệu lớn hằng ngày. 
-* **Ultra Low-Latency Streaming**: Tích hợp luồng event (nghe nhạc, skip bài) với **Kafka** và **Apache Flink (Java)** nhằm bắt các tương tác bất thường realtime.
-* **Serving Database Mix**: Cung cấp **Trino** làm SQL Query Engine và **Cassandra** cho NoSQL Dashboard response <10ms.
-* **MLOps**: Kết hợp thư viện **MLflow** vào quá trình training Pipeline để huấn luyện mô hình học máy (Isolation Forest) phát hiện dị thường.
-* **Infrastructure as Code (Azure)**: Quản lý hạ tầng đám mây Azure thông qua Terraform (`azure_iac`). 
+A big-data project that processes Spotify music-listening behaviour on a modern
+**Lakehouse** + **real-time streaming** architecture. It runs on a cloud-native
+Kubernetes platform and integrates MLOps and a data-cloud footprint at
+enterprise-grade standards.
 
 ---
 
-## 🏗️ Kiến trúc hệ thống (High-Level Architecture)
+## 🎯 Key Features
+
+* **Kubernetes Data Platform**: the whole ecosystem (Spark, Kafka, MinIO/Azure Data Lake) deployed on Kubernetes (AKS).
+* **Lakehouse Architecture**: a Medallion architecture (Bronze → Silver → Gold) on **Apache Iceberg** with ACID transactions.
+* **High-Throughput Batch ETL**: Apache Spark + PySpark for daily large-scale cleaning and modelling.
+* **Ultra Low-Latency Streaming**: listen/skip events through **Kafka** and **Apache Flink (Java)** to catch anomalous interactions in real time.
+* **Mixed Serving Databases**: **Trino** as the SQL query engine and **Cassandra** as the NoSQL store for sub-10ms dashboard responses.
+* **MLOps**: **MLflow** wired into the training pipeline to train an anomaly-detection model (Isolation Forest).
+* **Infrastructure as Code (Azure)**: the Azure cloud footprint is managed with Terraform (`azure_iac`).
+
+---
+
+## 🏗️ High-Level Architecture
 
 ```mermaid
 graph TD
@@ -62,52 +64,55 @@ graph TD
     end
 ```
 
-> ℹ️ Sơ đồ trên là **kiến trúc mục tiêu**. Trạng thái thực tế của từng thành phần
-> (đã build vs còn là roadmap) được liệt kê trung thực ngay dưới đây.
+> ℹ️ The diagram above is the **target architecture**. The real status of each
+> component (already built vs. still roadmap) is listed honestly below.
 
 ---
 
-## ✅ Trạng thái triển khai (Implemented vs Roadmap)
+## ✅ Implemented vs Roadmap
 
-Mọi tuyên bố trong tài liệu này ánh xạ tới code đã merge, hoặc được gắn nhãn
-roadmap rõ ràng. Chi tiết theo từng PR: `docs/CHANGELOG.md`.
+Every claim in these docs maps to merged code or is clearly labelled roadmap.
+Per-PR detail: `docs/CHANGELOG.md`.
 
-### ✅ Đã triển khai (merged vào `main`)
+### ✅ Implemented (merged into `main`)
 
-| Thành phần | Bằng chứng |
+| Component | Evidence |
 | :--- | :--- |
 | Central config + topic taxonomy | `common/config.py` |
-| Streaming Kafka → Cassandra & Elasticsearch, checkpoint bền vững | `spark_jobs/stream/*` (PR-04) |
+| Streaming Kafka → Cassandra & Elasticsearch, durable checkpoints | `spark_jobs/stream/*` (PR-04) |
 | Flink **stateful** windowed anomaly detection → Kafka `TOPIC_ANOMALY` | `flink_jobs/` (PR-05, PR-10) |
 | Fail-fast credentials (`require_env`) | `common/config.py` (PR-06) |
 | **Iceberg** Lakehouse Silver + Gold + maintenance (compaction/expiry) | `spark_jobs/batch/*`, `common/spark.py` (PR-07/08) |
 | **Star schema** + SCD2 dims + `fact_playback` | `spark_jobs/batch/build_*`, `common/modeling.py` (PR-09) |
-| Airflow batch DAG submitting Spark trên K8s (idempotent, backfillable) | `dags/spotify_batch_pipeline.py` (PR-11/12) |
+| Airflow batch DAG submitting Spark on K8s (idempotent, backfillable) | `dags/spotify_batch_pipeline.py` (PR-11/12) |
 | Structured JSON logging + fail-loud jobs | `common/logging.py` (PR-13) |
 | CI (lint · secret scan · conflict guard · pytest · Flink build) | `.github/workflows/ci.yml` (PR-14) |
-| Data-quality gates giữa các layer | `spark_jobs/quality/checks.py` (PR-15) |
+| Data-quality gates between layers | `spark_jobs/quality/checks.py` (PR-15) |
 | **MLOps**: feature table → Isolation Forest → MLflow registry | `spark_jobs/batch/build_features.py`, `mlops/` (PR-16) |
-| Kustomize `base/`+`overlays/` deploy, Helm values pinned | `kubernetes/` (PR-17) |
-| Cost/perf: native expr thay UDF, AQE, Iceberg file-sizing | `spark_jobs/batch/bronze_to_silver_all.py` (PR-18) |
+| Kustomize `base/`+`overlays/` deploy, pinned Helm values | `kubernetes/` (PR-17) |
+| Cost/perf: native expr replacing the UDF, AQE, Iceberg file-sizing | `spark_jobs/batch/bronze_to_silver_all.py` (PR-18) |
 | DR/scaling runbook + object versioning + replicated storage | `docs/DR_AND_SCALING.md`, `azure_iac/` (PR-19) |
 
-### 🗺️ Roadmap (chưa build / mới ở mức khung)
+### 🗺️ Roadmap (not built yet / scaffolding only)
 
-| Thành phần | Trạng thái |
+| Component | Status |
 | :--- | :--- |
-| **Trino** SQL engine (serving trên Gold) | Mục tiêu — chưa có manifest/job. |
-| **Realtime dashboard** | Khung Streamlit (`dashboard_app.py`), chưa nối serving hoàn chỉnh. |
-| **Alert system** cho anomaly | Flink phát ra `TOPIC_ANOMALY`; **consumer cảnh báo** downstream chưa có. |
-| Raw events → Bronze/Silver `events` | `fact_playback` hiện đọc Cassandra (serving store); landing raw vào lake là follow-up (`FACT_SOURCE` cho phép đổi bằng config). |
-| Silver/Gold format cutover | Iceberg đang sau feature-flag (`SILVER_FORMAT`/`GOLD_FORMAT`, mặc định `parquet`) — đường Parquet cũ giữ tới PR cutover. |
+| **Trino** SQL engine (serving on Gold) | Target — no manifest/job yet. |
+| **Realtime dashboard** | Streamlit scaffold (`dashboard_app.py`), serving not fully wired. |
+| **Alert system** for anomalies | Flink emits to `TOPIC_ANOMALY`; the downstream **alerting consumer** does not exist yet. |
+| Raw events → Bronze/Silver `events` | `fact_playback` currently reads Cassandra (the serving store); landing raw events into the lake is a follow-up (`FACT_SOURCE` makes the swap config-only). |
+| Silver/Gold format cutover | Iceberg is behind a feature flag (`SILVER_FORMAT`/`GOLD_FORMAT`, default `parquet`) — the legacy Parquet path stays until the cutover PR. |
 
 ---
 
-## 🗃️ Mô hình dữ liệu — Star Schema (ERD)
+## 🗃️ Data Model — Star Schema (ERD)
 
-Grain của fact là **một dòng / một sự kiện nghe nhạc** (`event_id`); dimensions là
-SCD2 (surrogate key + `attr_hash` + `valid_from`/`valid_to`/`is_current`). Chi
-tiết: `docs/DATA_MODEL.md`.
+The fact grain is **one row per playback event** (`event_id`); dimensions are
+SCD2 (surrogate key + `attr_hash` + `valid_from`/`valid_to`/`is_current`).
+Full detail: `docs/DATA_MODEL.md`.
+
+Legend: `PK` = surrogate key · `UK` = business/natural key · `FK` → dim surrogate
+key · dims carry SCD2 columns (`attr_hash`, `valid_from`, `valid_to`, `is_current`).
 
 ```mermaid
 erDiagram
@@ -117,36 +122,36 @@ erDiagram
 
     dim_track {
         string surrogate_key PK
-        string track_id BK
+        string track_id UK
         string name
-        int    duration_ms
+        int duration_ms
         string duration_category
-        int    popularity
-        bool   is_current "SCD2"
+        int popularity
+        boolean is_current
     }
     dim_artist {
         string surrogate_key PK
-        string artist_id BK
+        string artist_id UK
         string name
-        long   followers_total
-        bool   is_current "SCD2"
+        long followers_total
+        boolean is_current
     }
     dim_album {
         string surrogate_key PK
-        string album_id BK
+        string album_id UK
         string name
         string album_type
-        bool   is_current "SCD2"
+        boolean is_current
     }
     fact_playback {
-        string event_id PK "degenerate / MERGE key"
+        string event_id PK
         string user_id
         timestamp event_time
         string track_sk FK
         string artist_sk FK
         string album_sk FK
-        long   listen_duration_ms
-        int    is_skipped
+        long listen_duration_ms
+        int is_skipped
         string status
     }
 ```
@@ -155,40 +160,40 @@ erDiagram
 
 ## 🚀 Quickstart
 
-**1. Test cục bộ (không cần cluster):**
+**1. Test locally (no cluster needed):**
 ```bash
 pip install -r requirements-dev.txt
-pytest                     # unit tests; test cần Spark/Airflow/MinIO sẽ tự skip
+pytest                     # unit tests; Spark/Airflow/MinIO tests self-skip
 ruff check .               # lint
 ```
 
-**2. Cấu hình secrets (không commit):**
+**2. Configure secrets (never commit them):**
 ```bash
 cp ingestion/producer/.env.example ingestion/producer/.env
 cp ingestion/consumer/.env.example ingestion/consumer/.env
-# điền SPOTIFY_CLIENT_ID/SECRET, MINIO_ACCESS_KEY/SECRET_KEY (xem docs/SECRETS.md)
+# fill in SPOTIFY_CLIENT_ID/SECRET, MINIO_ACCESS_KEY/SECRET_KEY (see docs/SECRETS.md)
 ```
 
-**3. Triển khai hạ tầng (Kustomize, render offline được):**
+**3. Deploy infrastructure (Kustomize, renders offline):**
 ```bash
-kubectl kustomize kubernetes/overlays/dev     # xem trước
-kubectl apply   -k kubernetes/overlays/dev    # hoặc overlays/prod
+kubectl kustomize kubernetes/overlays/dev     # preview
+kubectl apply   -k kubernetes/overlays/dev    # or overlays/prod
 ```
-Cài Airflow + Spark Operator bằng Helm — xem `kubernetes/README.md`.
+Install Airflow + Spark Operator with Helm — see `kubernetes/README.md`.
 
-**4. Chạy batch ETL** (Airflow trigger DAG `spotify_batch_pipeline`, hoặc local):
+**4. Run the batch ETL** (trigger the Airflow `spotify_batch_pipeline` DAG, or locally):
 ```bash
 INGEST_DATE=2025-12-21 SILVER_FORMAT=iceberg \
   spark-submit spark_jobs/batch/bronze_to_silver_all.py
 ```
 
-**5. MLOps loop** — build features rồi train + register model:
+**5. MLOps loop** — build features, then train + register the model:
 ```bash
 spark-submit spark_jobs/batch/build_features.py
-python mlops/train_anomaly_model.py           # xem docs/MLOPS.md
+python mlops/train_anomaly_model.py           # see docs/MLOPS.md
 ```
 
-### 📚 Tài liệu
+### 📚 Documentation
 `docs/DATA_MODEL.md` · `docs/lakehouse.md` · `docs/streaming.md` ·
 `docs/orchestration.md` · `docs/DATA_QUALITY.md` · `docs/MLOPS.md` ·
 `docs/DR_AND_SCALING.md` · `docs/CONFIGURATION.md` · `docs/SECRETS.md` ·
@@ -196,29 +201,30 @@ python mlops/train_anomaly_model.py           # xem docs/MLOPS.md
 
 ---
 
-## 📁 Cấu trúc Thư mục
+## 📁 Directory Structure
 
-* `/spark_jobs`: Code ETL Batch/Streaming với PySpark và Iceberg.
-* `/flink_jobs`: Project Java Flink handle Realtime Anomaly Detection.
-* `/kubernetes`: K8s Manifests hạ tầng.
-* `/mlops`: Pipeline machine learning train model.
-* `/azure_iac`: Terraform script chạy Azure Cloud.
-* `/docs`: Tài liệu chuẩn bị phỏng vấn, kiến trúc và concept.
+* `/spark_jobs`: Batch/streaming ETL code in PySpark + Iceberg.
+* `/flink_jobs`: The Java Flink project for real-time anomaly detection.
+* `/kubernetes`: Infrastructure K8s manifests.
+* `/mlops`: The machine-learning training pipeline.
+* `/azure_iac`: Terraform for the Azure cloud footprint.
+* `/docs`: Interview-prep, architecture, and concept documentation.
 
-*(📝 Xem giải thích kỹ thuật và các quyết định kiến trúc tại `/docs/INTERVIEW_DOCUMENTATION.md`)*
+*(📝 Technical explanations and architecture decisions live in `/docs/INTERVIEW_DOCUMENTATION.md`.)*
 
 ---
 
-## ⚙️ Cấu hình (Environment Variables)
+## ⚙️ Configuration (Environment Variables)
 
-Các job đọc cấu hình từ biến môi trường để không phụ thuộc vào máy cụ thể. Các biến sau được thêm/chuẩn hoá gần đây:
+Jobs read their configuration from environment variables so they don't depend on
+a specific machine. Recently added / standardised variables:
 
-| Biến | Mặc định | Dùng bởi | Mô tả |
+| Variable | Default | Used by | Description |
 | :--- | :--- | :--- | :--- |
-| `INGEST_DATE` | `2025-12-21` | `spark_jobs/batch/bronze_to_silver_all.py`, `silver_to_gold_all.py` | Ngày partition dữ liệu cần xử lý. Airflow có thể truyền `{{ ds }}`. |
-| `TRACKS_DATA_PATH` | `<repo>/data/tracks.json` | `spark_jobs/stream/produce_to_kafka.py` | Đường dẫn file track cho producer (mặc định trỏ vào repo, portable). |
-| `TOPIC_PLAYBACK` | `spotify_playback_events` | Producer + các stream job (`common/config.py`) | Tên topic thống nhất cho luồng sự kiện nghe nhạc. |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | *(bắt buộc)* | Các job đọc/ghi MinIO | Bắt buộc — job dừng ngay (fail-fast) nếu thiếu, không dùng default không an toàn. |
-| `DATA_DIR` | `<repo>/data` | `minIO/*.py`, một số batch job | Thư mục dữ liệu local (thay cho đường dẫn `D:\...` cứng). |
+| `INGEST_DATE` | `2025-12-21` | `spark_jobs/batch/bronze_to_silver_all.py`, `silver_to_gold_all.py` | Partition date of the data to process. Airflow can pass `{{ ds }}`. |
+| `TRACKS_DATA_PATH` | `<repo>/data/tracks.json` | `spark_jobs/stream/produce_to_kafka.py` | Track file path for the producer (defaults into the repo, portable). |
+| `TOPIC_PLAYBACK` | `spotify_playback_events` | Producer + stream jobs (`common/config.py`) | Unified topic name for the listening-event stream. |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | *(required)* | Jobs that read/write MinIO | Required — the job fails fast if unset instead of falling back to an insecure default. |
+| `DATA_DIR` | `<repo>/data` | `minIO/*.py`, some batch jobs | Local data directory (replacing hardcoded `D:\...` paths). |
 
-*(Nguồn cấu hình tập trung: `common/config.py` — xem `/docs/CONFIGURATION.md`. Chi tiết thay đổi theo từng PR: xem `/docs/CHANGELOG.md`.)*
+*(Central configuration source: `common/config.py` — see `/docs/CONFIGURATION.md`. Per-PR change detail: see `/docs/CHANGELOG.md`.)*
