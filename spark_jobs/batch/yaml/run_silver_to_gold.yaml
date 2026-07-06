@@ -1,7 +1,11 @@
+# Rendered as a Jinja template by SparkKubernetesOperator: {{ ds }} / {{ ds_nodash }}
+# are substituted at submit time (PR-12). The per-run name suffix keeps backfills
+# of different dates from colliding. MinIO credentials come from the
+# `minio-credentials` Secret, never hardcoded (PR-02/PR-12).
 apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
-  name: batch-silver-to-gold
+  name: batch-silver-to-gold-{{ ds_nodash }}
   namespace: bigdata
 spec:
   type: Python
@@ -9,13 +13,13 @@ spec:
   mode: cluster
   image: "xuanbinh282/spotify-spark-jobs:v1"
   imagePullPolicy: Always
-  
+
   mainApplicationFile: "local:///opt/spark/work-dir/spark_jobs/batch/silver_to_gold_all.py"
-  
+
   sparkVersion: "3.5.3"
   restartPolicy:
     type: Never
-  
+
   sparkConf:
     "spark.jars.ivy": "/tmp/.ivy2"
 
@@ -32,12 +36,20 @@ spec:
       version: 3.5.3
     serviceAccount: spark-operator-spark
     env:
+      - name: DT
+        value: "{{ ds }}"
       - name: MINIO_ENDPOINT
         value: "http://minio.bigdata:9000"
       - name: MINIO_ACCESS_KEY
-        value: "minioadmin"
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: access-key
       - name: MINIO_SECRET_KEY
-        value: "miniopass123"
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: secret-key
 
   executor:
     cores: 1
@@ -46,9 +58,17 @@ spec:
     labels:
       version: 3.5.3
     env:
+      - name: DT
+        value: "{{ ds }}"
       - name: MINIO_ENDPOINT
         value: "http://minio.bigdata:9000"
       - name: MINIO_ACCESS_KEY
-        value: "minioadmin"
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: access-key
       - name: MINIO_SECRET_KEY
-        value: "miniopass123"
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: secret-key

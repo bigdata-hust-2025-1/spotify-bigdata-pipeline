@@ -3,6 +3,57 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-12 — Airflow orchestrates Spark on K8s + idempotent, scheduled maintenance
+
+**Type:** feat (airflow) · **Branch:** `pr-012-batch-orchestration` (stacked on `pr-011-airflow-hygiene`; merge PR-11 first)
+
+### Context
+Heavy work (crawl + upload) ran inside the Airflow worker, and the Spark batch
+ETL had no schedule — it was orphaned from orchestration entirely (findings E3,
+F2). There was no idempotent, backfillable batch DAG.
+
+### Added / Changed
+- **`dags/spotify_batch_pipeline.py`** (new) — a separate `dag_id` that submits
+  every heavy step to Kubernetes and waits on it: `crawl` (pod) → `land_bronze`
+  (pod) → `bronze_to_silver` → `silver_to_gold` → `gold_to_es` → `maintenance`,
+  each Spark step a `SparkKubernetesOperator` + `SparkKubernetesSensor` pair so
+  the driver's success/failure becomes the task's state. `catchup=True` +
+  `max_active_runs=1` make it backfillable one date at a time.
+- **`spark_jobs/batch/yaml/run_{bronze_to_silver,silver_to_gold,gold_to_es}.yaml`** —
+  reconciled with the DAG: per-run name `…-{{ ds_nodash }}` (backfill-safe), the
+  logical date `DT={{ ds }}` in driver+executor, and MinIO credentials moved from
+  a **hardcoded `miniopass123`** to a `minio-credentials` `secretKeyRef` (closes a
+  secret PR-02 had missed in these specs).
+- **`spark_jobs/batch/yaml/run_maintenance.yaml`** (new) — submits `maintenance.py`
+  (PR-08) with the Iceberg runtime as the final batch step.
+- **`docs/orchestration.md`** (new) — flow, backfill semantics, cluster
+  prerequisites (incl. creating the `minio-credentials` secret), validation.
+- **`tests/test_batch_pipeline.py`** (new) — renders every SparkApplication spec
+  and asserts per-run name, `DT`, and `secretKeyRef` (no plaintext secret); a
+  `DagBag` structure test that skips without Airflow (runs in CI).
+
+### Design decisions
+1. **Submit + sensor per Spark step.** The roadmap asks for K8s submission "with
+   sensors"; the sensor blocks on the driver so Airflow reflects real job state
+   instead of fire-and-forget. The sensor reads the submitted application's name
+   from the operator's XCom, so it tracks the exact per-run `SparkApplication`.
+2. **Per-run `SparkApplication` names + serialised backfill.** `{{ ds_nodash }}`
+   in `metadata.name` avoids collisions across dates; `max_active_runs=1` avoids
+   concurrent writers on the same Iceberg tables. Idempotent steps make the
+   backfill correct and duplicate-free.
+3. **Credentials via Secret, not YAML.** Reconciling the specs was the right
+   moment to remove the hardcoded MinIO password and pull from a Secret.
+4. **Separate `dag_id`, legacy DAG untouched.** Rollback is deleting one file;
+   no shared state (additive-first, main stays green).
+
+### Verification
+`python tests/test_batch_pipeline.py` → 4 spec tests PASS (DAG-import skips
+locally, runs in CI); full existing suite still green. `py_compile` + `ruff` clean
+on the new DAG. Live K8s submission / two-date backfill require a minikube cluster
+(documented in `docs/orchestration.md`, not runnable here).
+
+---
+
 ## PR-11 — Airflow hygiene: clients-in-tasks, drop `depends_on_past`, logical-date
 
 **Type:** fix (airflow) · **Branch:** `pr-011-airflow-hygiene` (off `main`)

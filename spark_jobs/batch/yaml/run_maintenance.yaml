@@ -1,11 +1,11 @@
-# Rendered as a Jinja template by SparkKubernetesOperator: {{ ds }} / {{ ds_nodash }}
-# are substituted at submit time (PR-12). The per-run name suffix keeps backfills
-# of different dates from colliding. MinIO credentials come from the
-# `minio-credentials` Secret, never hardcoded (PR-02/PR-12).
+# Iceberg table maintenance (compaction, snapshot expiry, orphan-file removal).
+# Runs maintenance.py (PR-08) as the final batch step (PR-12). Rendered as a Jinja
+# template by SparkKubernetesOperator: {{ ds_nodash }} makes the name unique per
+# run. MinIO credentials come from the `minio-credentials` Secret.
 apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
-  name: batch-gold-to-es-{{ ds_nodash }}
+  name: batch-maintenance-{{ ds_nodash }}
   namespace: bigdata
 spec:
   type: Python
@@ -14,7 +14,7 @@ spec:
   image: "xuanbinh282/spotify-spark-jobs:v1"
   imagePullPolicy: Always
 
-  mainApplicationFile: "local:///opt/spark/work-dir/spark_jobs/batch/gold_to_es.py"
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_jobs/batch/maintenance.py"
 
   sparkVersion: "3.5.3"
   restartPolicy:
@@ -23,12 +23,12 @@ spec:
   sparkConf:
     "spark.jars.ivy": "/tmp/.ivy2"
 
-  # Thêm thư viện Elasticsearch
+  # Iceberg runtime + S3A: the maintenance CALLs run against the Iceberg catalog.
   deps:
     packages:
       - org.apache.hadoop:hadoop-aws:3.3.4
       - com.amazonaws:aws-java-sdk-bundle:1.12.262
-      - org.elasticsearch:elasticsearch-spark-30_2.12:7.17.9
+      - org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2
 
   driver:
     cores: 1
