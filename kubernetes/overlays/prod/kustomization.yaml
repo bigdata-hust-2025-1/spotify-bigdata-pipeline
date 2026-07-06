@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prod environment: the same base, with higher availability and heap for the
+# stateless/serving components. Stateful singletons (minio, elasticsearch data,
+# airflow-postgres) stay single-replica on purpose — they are backed by a single
+# PV here and would need a proper HA StatefulSet + storage story to scale (see
+# docs/DR_AND_SCALING.md, PR-19). Patches target components by name.
+#
+# Render with:  kubectl kustomize kubernetes/overlays/prod
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: prod
+
+commonAnnotations:
+  spotify.pipeline/environment: prod
+
+patches:
+  - path: patch-kafka-ui-replicas.yaml
+    target:
+      kind: Deployment
+      name: kafka-ui
+  - path: patch-elasticsearch-resources.yaml
+    target:
+      kind: Deployment
+      name: elasticsearch

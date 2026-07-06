@@ -3,6 +3,68 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-17 — Deployment consolidation: Kustomize base/overlays + pinned Helm values
+
+**Type:** chore (k8s) · **Branch:** `pr-017-deployment-consolidation` (off `main`)
+
+### Context
+`kubernetes/` had five overlapping Airflow values files (`airflow-values.yaml`
+in two directories, `airflow.values.yaml`, `.utf8`, `.current`), a 2332-line
+`airflow.manifest.yaml` (a rendered-manifest dump), and `fix_operator.yaml`
+(a live `kubectl get deployment -o yaml` of the Spark Operator, complete with
+`resourceVersion`/`uid`/`status`). Images `kafka-ui` and `minio` floated on
+`:latest`, and there was no dev/prod separation (finding I2).
+
+### Added / Changed
+- **`kubernetes/base/`** (new) — one Kustomize base bundling the raw infra
+  manifests (`kafka`, `kafka-ui`, `minio`, `mongodb`, `elk`, `airflow-postgres`,
+  `rbac-airflow-bigdata`) plus `namespaces.yaml`, which now also declares the
+  **`airflow`** namespace that `airflow-postgres.yaml` targeted but nothing
+  created.
+- **`kubernetes/overlays/{dev,prod}`** (new) — `dev` is the single-node base;
+  `prod` layers patches (two `kafka-ui` replicas, a larger Elasticsearch heap +
+  memory). Both render offline via `kubectl kustomize`.
+- **`kubernetes/helm/airflow/values.yaml`** — the single canonical Airflow Helm
+  values (moved from the well-documented `kubernetes/airflow-values.yaml`).
+- **`kubernetes/helm/spark-operator/values.yaml`** (new) — replaces the
+  `fix_operator.yaml` live dump with declarative, chart-pinned values
+  (namespace `bigdata`, image `ghcr.io/kubeflow/spark-operator/controller:2.4.0`,
+  metrics on).
+- **Pinned images** — `provectuslabs/kafka-ui:v0.7.2`,
+  `minio/minio:RELEASE.2024-01-16T16-07-38Z` (off `:latest`).
+- **`kubernetes/README.md`** (new) — the two-layer deploy runbook (Kustomize for
+  infra, Helm for Airflow + Spark Operator).
+
+### Removed
+`airflow/airflow-values.yaml`, `airflow/airflow.values.yaml`,
+`airflow/airflow.values.utf8.yaml`, `airflow/airflow.values.current.yaml`,
+`airflow/airflow.manifest.yaml`, `fix_operator.yaml`, and the old root
+`namespace.yaml` (folded into `base/namespaces.yaml`).
+
+### Design decisions
+1. **Kustomize for raw infra, Helm for platforms.** The infra manifests are
+   hand-authored YAML that Kustomize layers cleanly (and validates fully offline
+   with `kubectl kustomize`); Airflow and the Spark Operator are upstream charts,
+   so they stay as pinned Helm values rather than being force-fit into Kustomize.
+2. **No global namespace transformer.** Resources deliberately span `bigdata`
+   and `airflow`, so each manifest keeps its own `namespace:` and the base does
+   not override it.
+3. **Stateful singletons stay single-replica.** `prod` scales only stateless
+   components; MinIO/Elasticsearch-data/Postgres need a real HA storage story
+   (deferred to PR-19) before scaling, so the overlay does not fake it.
+4. **`fix_operator.yaml` distilled, not kept.** A live-object dump is not
+   reproducible; only its meaningful settings were re-expressed as chart values.
+
+### Acceptance criteria
+- [x] One values source per environment; no `.utf8`/`.current`/duplicate files.
+- [x] All charts/images version-pinned.
+- [x] `kubectl kustomize overlays/{dev,prod}` renders cleanly (24 objects each).
+
+### Rollback
+Revert restores the prior manifests (kept in git history); infra is declarative,
+so re-applying the old files is deterministic. Coordinate with any live cluster
+before applying.
+
 ## PR-16 — MLOps loop: feature table -> training -> MLflow registry
 
 **Type:** feat (mlops) · **Branch:** `pr-016-mlops-loop` (off `main`)

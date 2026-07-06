@@ -1,4 +1,4 @@
-# kubernetes/minio.yaml
+# kubernetes/base/minio.yaml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: minio
-        image: minio/minio:latest
+        image: minio/minio:RELEASE.2024-01-16T16-07-38Z
         args: ["server", "/data", "--console-address", ":9001"]
         ports:
         - containerPort: 9000

@@ -1,0 +1,14 @@
+# Namespaces used across the platform.
+#   bigdata — Kafka, MinIO, ELK, MongoDB, kafka-ui, Spark applications (spark-operator watches this namespace).
+#   airflow — the Airflow Helm release and its external Postgres metadata DB.
+# Both are declared here so `kubectl kustomize` renders a self-consistent bundle
+# (previously only `bigdata` existed, yet airflow-postgres.yaml targeted `airflow`).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bigdata
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: airflow

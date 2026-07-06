@@ -1,0 +1,8 @@
+# Prod runs two kafka-ui replicas behind the ClusterIP service for availability.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: bigdata
+spec:
+  replicas: 2

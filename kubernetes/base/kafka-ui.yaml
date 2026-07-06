@@ -1,4 +1,4 @@
-# kubernetes/kafka-ui.yaml
+# kubernetes/base/kafka-ui.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: kafka-ui
-        image: provectuslabs/kafka-ui:latest
+        image: provectuslabs/kafka-ui:v0.7.2
         ports:
         - containerPort: 8080
         env:

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Dev environment: single-node, low footprint — the base manifests are already
+# sized for a laptop / minikube, so dev layers on only an environment marker.
+#
+# Render with:  kubectl kustomize kubernetes/overlays/dev
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: dev
+
+commonAnnotations:
+  spotify.pipeline/environment: dev
