@@ -141,6 +141,16 @@ def build_spark(
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+        # Adaptive Query Execution: coalesce small post-shuffle partitions at
+        # runtime so aggregations/joins don't emit hundreds of tiny files or
+        # waste scheduler overhead on skewed/small data (findings J1/J2). On by
+        # default in Spark 3.5, but pinned explicitly (env-overridable) so the
+        # cost/perf behaviour is visible and stable.
+        .config("spark.sql.adaptive.enabled", os.getenv("SPARK_AQE_ENABLED", "true"))
+        .config(
+            "spark.sql.adaptive.coalescePartitions.enabled",
+            os.getenv("SPARK_AQE_COALESCE", "true"),
+        )
     )
 
     packages = []

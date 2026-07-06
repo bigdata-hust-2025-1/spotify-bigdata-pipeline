@@ -3,6 +3,61 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-18 — Cost & performance: native categorisation, AQE, file sizing
+
+**Type:** perf (batch) · **Branch:** `pr-018-cost-performance` (off `main`)
+
+### Context
+The Bronze→Silver job categorised track duration with a **Python UDF**
+(`categorize_duration` / `udf(...)`), which forces a per-row Python↔JVM
+round-trip in the hot path (finding C4). `common.spark.build_spark` set no
+Adaptive Query Execution, and the Silver Iceberg table declared no target file
+size, so `MERGE`/streaming could accumulate tiny files (finding J1/J2).
+*(The other J-class items were already resolved earlier: reads are delta-scoped
+by `ingest_date`, and the pre-write global `orderBy` was dropped in PR-08.)*
+
+### Added / Changed
+- **`spark_jobs/batch/bronze_to_silver_all.py`**
+  - Replaced the `categorize_duration` **Python UDF** with a native
+    `duration_category_expr()` (`F.when/otherwise`, JVM codegen — no per-row
+    Python). Kept a pure `categorize_duration()` as the single source of truth
+    for the thresholds (`DURATION_SHORT_MS=180_000`, `DURATION_MEDIUM_MS=300_000`),
+    unit-tested with no JVM. Dropped the now-unused `udf` / `StringType` imports.
+  - Empty date-partitions now short-circuit with `df.isEmpty()` instead of a
+    `count()==0` guard; the full `count()` is taken only as a real metric on the
+    non-empty path (faster empty-backfill dates).
+  - Silver Iceberg table created with
+    `TBLPROPERTIES ('write.target-file-size-bytes'='134217728')` (~128 MiB) to
+    target compaction-friendly file sizes on write.
+- **`common/spark.py`** — `build_spark` now enables Adaptive Query Execution
+  (`spark.sql.adaptive.enabled`, `…coalescePartitions.enabled`), both
+  env-overridable (`SPARK_AQE_ENABLED` / `SPARK_AQE_COALESCE`), so small
+  post-shuffle partitions coalesce at runtime.
+- **`tests/test_transforms.py`** (new) — a JVM-free value-matrix test locking the
+  categorisation boundaries (None/0 → `Unknown`, the 3-min / 5-min edges), plus a
+  Spark-backed test asserting the native expression equals the pure function on
+  the same matrix (skips where no JVM is available, per the repo's Spark-test
+  policy).
+
+### Design decisions
+1. **Pure reference + native mirror.** The boundary semantics stay in a pure
+   Python function (testable in CI with no Spark); the hot path uses the native
+   expression built from the *same* constants, so correctness is CI-verifiable
+   and the expensive UDF round-trip is gone.
+2. **`isEmpty()` for the guard, `count()` for the metric.** Only the emptiness
+   decision is short-circuited; the row-count observability is preserved.
+3. **File sizing on write + AQE coalesce**, complementing (not replacing) the
+   PR-08 compaction job — smaller blast radius than rewriting the write path.
+
+### Acceptance criteria
+- [x] A run processes only the new date's data (reads are `ingest_date`-scoped).
+- [x] No pre-write `orderBy`; no `count()`-as-guard; no Python UDF in the hot path.
+- [x] Output file sizes targeted (`write.target-file-size-bytes` + AQE coalesce).
+
+### Rollback
+Pure code revert; outputs are equivalent data (the native expression is
+behaviour-identical to the old UDF), so rollback is behaviour-preserving.
+
 ## PR-17 — Deployment consolidation: Kustomize base/overlays + pinned Helm values
 
 **Type:** chore (k8s) · **Branch:** `pr-017-deployment-consolidation` (off `main`)
