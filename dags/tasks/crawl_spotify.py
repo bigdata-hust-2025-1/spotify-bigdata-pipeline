@@ -20,25 +20,37 @@ KAFKA_TOPIC_TRACKS = os.getenv("KAFKA_TOPIC_TRACKS", "spotify_tracks")
 KAFKA_TOPIC_ARTISTS = os.getenv("KAFKA_TOPIC_ARTISTS", "spotify_artists")
 LIMIT_PER_PAGE = int(os.getenv("LIMIT_PER_PAGE", "50"))
 
-if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-    raise EnvironmentError("SPOTIFY_CLIENT_ID và SPOTIFY_CLIENT_SECRET phải được thiết lập!")
+# NOTE (PR-11): clients are built lazily inside the factories below — never at
+# import time. Airflow parses this module every few seconds while scanning the
+# DAGs folder; constructing a Spotify client / KafkaProducer / KafkaAdminClient
+# (or, worse, running a full crawl) at module scope opened live network
+# connections on every parse. The Airflow task calls run_crawl(), which owns the
+# lifecycle of every client it creates.
 
-# === KHỞI TẠO SPOTIFY ===
-sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-    client_id=SPOTIFY_CLIENT_ID,
-    client_secret=SPOTIFY_CLIENT_SECRET
-))
 
-# === KHỞI TẠO KAFKA PRODUCER ===
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BOOTSTRAP,
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    retries=5,                  # Tăng retries
-    max_block_ms=300000,        # Tăng timeout lên 120 giây
-    request_timeout_ms=30000,
-    acks='all'
-)
-print(f"Connected to Kafka.")
+def build_spotify():
+    """Construct an authenticated Spotify client. Fails fast on missing creds."""
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        raise EnvironmentError(
+            "SPOTIFY_CLIENT_ID và SPOTIFY_CLIENT_SECRET phải được thiết lập!"
+        )
+    return spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+        client_id=SPOTIFY_CLIENT_ID,
+        client_secret=SPOTIFY_CLIENT_SECRET,
+    ))
+
+
+def build_producer():
+    """Construct the Kafka producer used to publish crawled items."""
+    return KafkaProducer(
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+        retries=5,
+        max_block_ms=300000,
+        request_timeout_ms=30000,
+        acks='all',
+    )
+
 
 # Hàm tạo topic nếu chưa tồn tại
 def create_topic_if_not_exists(topic_name, bootstrap_servers, num_partitions=6, replication_factor=1):
@@ -57,11 +69,6 @@ def create_topic_if_not_exists(topic_name, bootstrap_servers, num_partitions=6, 
         print(f"Topic {topic_name} already exists.")
     
     admin_client.close()
-
-# Gọi hàm trước khi dùng producer
-create_topic_if_not_exists(KAFKA_TOPIC_ALBUMS, KAFKA_BOOTSTRAP)
-create_topic_if_not_exists(KAFKA_TOPIC_TRACKS, KAFKA_BOOTSTRAP)
-create_topic_if_not_exists(KAFKA_TOPIC_ARTISTS, KAFKA_BOOTSTRAP)
 
 
 # ==================== HÀM TỐI GIẢN DỮ LIỆU ====================
@@ -140,9 +147,11 @@ def get_all_new_releases(sp, limit_per_page: int = 50) -> List[Dict]:
     return all_albums_basic
 
 # ==================== HÀM CRAWL DỮ LIỆU NEW RELEASES ====================
-def crawl_new_releases():
+def crawl_new_releases(sp=None):
+    if sp is None:
+        sp = build_spotify()
     print("Đang lấy toàn bộ albums mới nhất (global)...")
-    
+
     albums_basic = get_all_new_releases(sp, LIMIT_PER_PAGE)
     
     simplified_albums: List[Dict] = []
@@ -213,47 +222,44 @@ def crawl_new_releases():
     print(f"\nĐã lấy dữ liệu: Albums: {len(simplified_albums)}, Tracks: {len(simplified_tracks)}, Artists: {len(simplified_artists)}")
     return simplified_albums, simplified_tracks, simplified_artists
 
-# === CHẠY MỘT LẦN DUY NHẤT ===
-print("Spotify New Releases → Kafka Producer started (batch mode)...")
-print(f"   Topics: Albums: {KAFKA_TOPIC_ALBUMS}, Tracks: {KAFKA_TOPIC_TRACKS}, Artists: {KAFKA_TOPIC_ARTISTS}")
-print(f"   Limit per page: {LIMIT_PER_PAGE}\n")
+# ==================== AIRFLOW TASK ENTRYPOINT ====================
+def run_crawl(logical_date=None, sp=None, producer=None):
+    """Crawl Spotify new releases and publish them to Kafka.
 
-try:
-    simplified_albums, simplified_tracks, simplified_artists = crawl_new_releases()
+    This is the callable invoked by the Airflow ``crawl_spotify`` task. It owns
+    the lifecycle of the clients it creates: unless a client is injected (tests),
+    it builds its own Spotify + Kafka producer and always closes the producer in
+    a ``finally`` block — so a failed run never leaks a live connection. Nothing
+    here runs at import time (PR-11).
 
-    sent = 0
+    ``logical_date`` is the DAG run's ``{{ ds }}`` (YYYY-MM-DD); it is threaded
+    through for logging/lineage rather than a hardcoded literal.
+    """
+    if sp is None:
+        sp = build_spotify()
+    owns_producer = producer is None
+    if producer is None:
+        producer = build_producer()
 
-    # Gửi albums
-    for item in simplified_albums:
-        producer.send(KAFKA_TOPIC_ALBUMS, item)
-        item_type = item.get('type', 'unknown')
-        item_name = item.get('name', 'N/A')
-        print(f"Sent to {KAFKA_TOPIC_ALBUMS}: {item_type} - {item_name}")
-        sent += 1
+    try:
+        for topic in (KAFKA_TOPIC_ALBUMS, KAFKA_TOPIC_TRACKS, KAFKA_TOPIC_ARTISTS):
+            create_topic_if_not_exists(topic, KAFKA_BOOTSTRAP)
 
-    # Gửi tracks
-    for item in simplified_tracks:
-        producer.send(KAFKA_TOPIC_TRACKS, item)
-        item_type = item.get('type', 'unknown')
-        item_name = item.get('name', 'N/A')
-        print(f"Sent to {KAFKA_TOPIC_TRACKS}: {item_type} - {item_name}")
-        sent += 1
+        simplified_albums, simplified_tracks, simplified_artists = crawl_new_releases(sp)
 
-    # Gửi artists
-    for item in simplified_artists:
-        producer.send(KAFKA_TOPIC_ARTISTS, item)
-        item_type = item.get('type', 'unknown')
-        item_name = item.get('name', 'N/A')
-        print(f"Sent to {KAFKA_TOPIC_ARTISTS}: {item_type} - {item_name}")
-        sent += 1
+        sent = 0
+        for topic, items in (
+            (KAFKA_TOPIC_ALBUMS, simplified_albums),
+            (KAFKA_TOPIC_TRACKS, simplified_tracks),
+            (KAFKA_TOPIC_ARTISTS, simplified_artists),
+        ):
+            for item in items:
+                producer.send(topic, item)
+                sent += 1
 
-    producer.flush()
-    print(f"Đã gửi {sent} items vào Kafka.\n")
-
-except Exception as e:
-    print(f"[Lỗi nghiêm trọng] {e}")
-    raise  # Raise để pod fail nếu error, CronJob sẽ retry theo backoffLimit
-
-finally:
-    producer.close()  # Đảm bảo close producer dù success hay error
-    print("Batch crawl completed.")
+        producer.flush()
+        print(f"[crawl] logical_date={logical_date} -> sent {sent} items to Kafka.")
+        return sent
+    finally:
+        if owns_producer:
+            producer.close()  # Đảm bảo close producer dù success hay error

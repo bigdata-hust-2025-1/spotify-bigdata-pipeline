@@ -3,6 +3,59 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-11 — Airflow hygiene: clients-in-tasks, drop `depends_on_past`, logical-date
+
+**Type:** fix (airflow) · **Branch:** `pr-011-airflow-hygiene` (off `main`)
+
+### Context
+`dags/spotify_pipeline.py` imported a live `KafkaProducer`, and both task
+modules built their Spotify/Kafka/MinIO clients — and even **ran a full crawl /
+consume loop** — at module scope. Airflow re-parses the DAGs folder every few
+seconds, so every parse opened real network connections (findings E1, E2, E4).
+`depends_on_past=True` combined with `retries` could deadlock the schedule; the
+schedule comment ("daily") contradicted its `*/7 * * * *` cron; `owner` was the
+placeholder `your_name`; and the ingest date was not templated.
+
+### Changed
+- **`dags/tasks/crawl_spotify.py`** — removed the module-level Spotify client,
+  `KafkaProducer`, topic-creation calls, and the entire run-at-import block. Added
+  `build_spotify()` / `build_producer()` factories; `crawl_new_releases(sp=None)`
+  builds lazily; new `run_crawl(logical_date, sp=None, producer=None)` task
+  entrypoint that owns and always closes the producer it creates (`finally`).
+- **`dags/tasks/kafka_to_minio.py`** — removed the module-level MinIO client,
+  bucket check, and consume loop. Added `build_minio_client()` / `ensure_bucket()`;
+  `consume_and_upload(topic, folder, partition_date=None, client=None)` now
+  partitions by the supplied logical date (dropping a stray `+2 days` bug in the
+  fallback); new `run_consume(logical_date, client=None)` entrypoint. Removed an
+  unused `TopicPartition` import.
+- **`dags/spotify_pipeline.py`** — import the entrypoints (no live clients);
+  `depends_on_past=False`; real `owner='bigdata-team'`; `tags`; `max_active_runs=1`;
+  clarified `schedule_interval` comment; date templated via `op_kwargs={'logical_date': '{{ ds }}'}`.
+- **`tests/test_dags.py`** (new) — subprocess socket-guard proving the modules
+  open no connection at import; `run_crawl` unit tests (publishes to all topics,
+  owns/closes its producer, closes even on error); an Airflow `DagBag` import test
+  that skips when Airflow is absent (runs in CI).
+
+### Design decisions
+1. **Factories + task entrypoints, clients never at module scope.** Import-time
+   is side-effect-free, so the scheduler can parse the DAG cheaply and safely; the
+   task callable owns each client's lifecycle and closes it in `finally`.
+2. **Scope limited to the DAG-imported `dags/tasks/*` copies.** The standalone
+   `ingestion/*` scripts (run as K8s pods with `RUN_ONCE`) are a separate copy and
+   intentionally left untouched here.
+3. **`{{ ds }}` threaded as `logical_date`.** Backfills/reruns partition bronze
+   deterministically instead of by wall-clock or a literal.
+4. **`depends_on_past` dropped, `max_active_runs=1` added.** Removes the deadlock
+   risk while still preventing overlapping crawls.
+
+### Verification
+`python tests/test_dags.py` → crawl no-socket-at-import PASS (spotipy+kafka present
+locally), `run_crawl` unit tests PASS; MinIO/Airflow-dependent tests skip locally
+and run in CI. `ruff check dags/ tests/test_dags.py` → all checks passed. Full
+existing suite still green.
+
+---
+
 ## PR-10 — Stateful Flink windowed anomaly detection + Kafka sink
 
 **Type:** feat (flink) · **Branch:** `pr-010-stateful-flink` (off `main`)
