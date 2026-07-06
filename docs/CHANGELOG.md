@@ -3,6 +3,39 @@
 All notable changes to this repository are documented here. Entries are grouped
 by the roadmap PR they implement.
 
+## PR-20 — Repo hygiene: untrack artifacts, LICENSE, module READMEs
+
+**Type:** chore (hygiene) · **Branch:** `pr-020-repo-hygiene` (off `main`)
+
+### Context
+The repo tracked IDE config (`.idea/`) and generated pipeline data
+(`data/tracks_csv_output/`, `minIO/data/**.parquet`, `minIO/tracks_full.csv`),
+had **no LICENSE**, and most top-level modules had no README (finding K2). The
+stray root files (`30%`, `5`, `Socket`) were already gone.
+
+### Added / Changed
+- **`.gitignore`** — ignore `.idea/`, `/data/`, `minIO/data/`,
+  `minIO/tracks_full.csv`, and `*.parquet` (generated output must never be
+  committed).
+- **Untracked** (`git rm --cached`, kept locally): the 10 `.idea/` files, the
+  generated `data/tracks_csv_output/` CSVs, the two Gold `*.parquet` dumps under
+  `minIO/data/`, and `minIO/tracks_full.csv`.
+- **`LICENSE`** (new) — MIT (conventional default for a portfolio repo; the
+  owner can swap the license/copyright holder).
+- **Module READMEs** (new) — `common/`, `spark_jobs/`, `dags/`, `ingestion/`,
+  `mlops/`, `tests/`, `azure_iac/`, `cassandra/`, `minIO/`. Every top-level
+  module now has one (`flink_jobs/` and `kubernetes/` already did). The `minIO/`
+  README labels those scripts as legacy/pre-Iceberg.
+
+### Acceptance criteria
+- [x] No junk / IDE / generated-data files tracked (`git ls-files` clean).
+- [x] LICENSE present.
+- [x] Each top-level module has a README (11/11).
+
+### Rollback
+Untracking is reversible (`git add` back), but the ignore rules would need
+removing too; purely a tracking/docs change with no runtime impact.
+
 ## PR-19 — DR & scalability: recovery docs + object versioning/retention
 
 **Type:** docs + infra (dr) · **Branch:** `pr-019-dr-and-scaling` (off `main`)
