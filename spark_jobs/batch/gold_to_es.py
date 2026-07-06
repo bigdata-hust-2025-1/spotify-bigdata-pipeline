@@ -6,7 +6,14 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from common.config import ES_NODES, ES_PORT, GOLD_BUCKET, get_ingest_date  # noqa: E402
+from common.logging import (  # noqa: E402
+    FailureCollector,
+    get_logger,
+    stage_timer,
+)
 from common.spark import build_spark, gold_table  # noqa: E402
+
+LOG = get_logger("gold_to_es")
 
 GOLD_PATH = f"s3a://{GOLD_BUCKET}"
 INGEST_DATE = get_ingest_date()
@@ -55,15 +62,19 @@ def main():
         iceberg=(GOLD_FORMAT == "iceberg"),
         extra_packages=[ES_SPARK_RUNTIME],
     )
-    print("--> Syncing Gold data to Elasticsearch...")
-    for dataset, index in SYNC_TARGETS.items():
-        try:
-            df = read_gold(spark, dataset)
-            sync_to_es(df, index)
-            print(f"✅ {dataset} synced to ES index '{index}'.")
-        except Exception as e:
-            print(f"❌ Error syncing {dataset} -> '{index}': {e}")
-    spark.stop()
+    LOG.info("job_start", extra={"job": "gold_to_es", "format": GOLD_FORMAT})
+    failures = FailureCollector(LOG)
+    try:
+        for dataset, index in SYNC_TARGETS.items():
+            with failures.collect(dataset):
+                with stage_timer(LOG, dataset, index=index) as m:
+                    df = read_gold(spark, dataset)
+                    m["rows_out"] = df.count()
+                    sync_to_es(df, index)
+    finally:
+        spark.stop()
+    failures.raise_if_any()
+    LOG.info("job_done", extra={"job": "gold_to_es"})
 
 
 if __name__ == "__main__":

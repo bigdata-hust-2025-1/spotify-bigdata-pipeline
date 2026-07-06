@@ -9,7 +9,14 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from common.config import GOLD_BUCKET, SILVER_BUCKET, get_ingest_date  # noqa: E402
+from common.logging import (  # noqa: E402
+    FailureCollector,
+    get_logger,
+    stage_timer,
+)
 from common.spark import build_spark, gold_table, silver_table  # noqa: E402
+
+LOG = get_logger("silver_to_gold")
 
 # s3a paths for the medallion buckets (bucket names come from common.config).
 SILVER_PATH = f"s3a://{SILVER_BUCKET}"
@@ -56,23 +63,23 @@ def write_gold(df, dataset):
     if GOLD_FORMAT == "iceberg":
         table = gold_table(dataset)
         df.writeTo(table).using("iceberg").createOrReplace()
-        print(f"    [OK] {dataset} written as Iceberg {table}")
+        LOG.info("gold_write", extra={"stage": dataset, "sink": "iceberg", "table": table})
     else:
         output_path = f"{GOLD_PATH}/{dataset}/ingest_date={INGEST_DATE}"
         df.write.mode("overwrite").parquet(output_path)
-        print(f"    [OK] {dataset} written as Parquet {output_path}")
+        LOG.info("gold_write", extra={"stage": dataset, "sink": "parquet", "path": output_path})
 
 
 def build_gold_artists_stats(spark):
-    print("\n=== GOLD: artists_stats ===")
-    try:
+    """Build the artists_stats Gold table. Raises on failure (fail loudly)."""
+    with stage_timer(LOG, "artists_stats", format=GOLD_FORMAT) as m:
         df_tracks = read_silver(spark, "tracks")
         df_artists = read_silver(spark, "artists")
 
         # --- [ADVANCED] Caching Strategy ---
         # df_tracks is reused below, so cache it to avoid re-reading Silver.
         df_tracks.cache()
-        print(f"Cached Tracks count: {df_tracks.count()}")
+        m["tracks_in"] = df_tracks.count()
         # -----------------------------------
 
         df_tracks_exploded = df_tracks.withColumn(
@@ -101,16 +108,13 @@ def build_gold_artists_stats(spark):
         )
         # ---------------------------------
 
+        m["rows_out"] = df_gold.count()
         write_gold(df_gold, "artists_stats")
-        print("✅ Saved Artists Stats")
-
-    except Exception as e:
-        print(f"❌ Error Artists: {e}")
 
 
 def build_gold_albums_stats(spark):
-    print("\n=== GOLD: albums_stats ===")
-    try:
+    """Build the albums_stats Gold table. Raises on failure (fail loudly)."""
+    with stage_timer(LOG, "albums_stats", format=GOLD_FORMAT) as m:
         df_tracks = read_silver(spark, "tracks")
         df_albums = read_silver(spark, "albums")
 
@@ -137,15 +141,30 @@ def build_gold_albums_stats(spark):
             df_albums, on="album_id", how="left"
         )
 
+        m["rows_out"] = df_final.count()
         write_gold(df_final, "albums_stats")
-        print("✅ Saved Albums Stats")
 
-    except Exception as e:
-        print(f"❌ Error Albums: {e}")
+
+GOLD_STAGES = [
+    ("artists_stats", build_gold_artists_stats),
+    ("albums_stats", build_gold_albums_stats),
+]
+
+
+def main():
+    LOG.info("job_start", extra={"job": "silver_to_gold", "date": INGEST_DATE,
+                                 "format": GOLD_FORMAT})
+    spark = get_spark_session()
+    failures = FailureCollector(LOG)
+    try:
+        for stage_name, build_fn in GOLD_STAGES:
+            with failures.collect(stage_name):
+                build_fn(spark)
+    finally:
+        spark.stop()
+    failures.raise_if_any()
+    LOG.info("job_done", extra={"job": "silver_to_gold"})
 
 
 if __name__ == "__main__":
-    spark = get_spark_session()
-    build_gold_artists_stats(spark)
-    build_gold_albums_stats(spark)
-    spark.stop()
+    main()
